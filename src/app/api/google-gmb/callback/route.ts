@@ -65,40 +65,28 @@ function logOAuthError(errorType: string, details: Record<string, unknown>): voi
   }));
 }
 
-// Sample business data for demo mode
-// Note: Real business data requires Google Business Profile API approval
+// Generate empty GMB insights when API is not available
+// Real data requires Business Profile API approval
 // Apply at: https://developers.google.com/my-business/content/prereqs
-const DEMO_BUSINESSES = [
-  {
-    id: '1',
-    name: 'Your Business (API Access Required)',
-    address: 'Enable Business Profile API to see real data',
-    phone: 'See Google Business Profile',
-    category: 'Requires API Approval',
-    website: 'https://console.cloud.google.com/apis/library',
-    rating: 0,
-    totalReviews: 0
-  }
-];
-
-// Generate GMB insights
-function generateGMBInsights() {
+function generateEmptyInsights() {
   return {
-    views: 12847 + Math.floor(Math.random() * 2000),
-    searches: 3892 + Math.floor(Math.random() * 500),
-    actions: 156 + Math.floor(Math.random() * 50),
-    directionRequests: 89 + Math.floor(Math.random() * 30),
-    callClicks: 67 + Math.floor(Math.random() * 20),
-    websiteClicks: 134 + Math.floor(Math.random() * 40),
+    views: 0,
+    searches: 0,
+    actions: 0,
+    directionRequests: 0,
+    callClicks: 0,
+    websiteClicks: 0,
     reviews: {
-      total: 127 + Math.floor(Math.random() * 10),
-      average: 4.8,
-      distribution: { 5: 98, 4: 21, 3: 5, 2: 2, 1: 1 }
+      total: 0,
+      average: 0,
+      distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
     },
-    photos: 45 + Math.floor(Math.random() * 10),
-    posts: 12 + Math.floor(Math.random() * 3),
-    qanda: 8 + Math.floor(Math.random() * 3),
-    lastUpdated: new Date().toISOString()
+    photos: 0,
+    posts: 0,
+    qanda: 0,
+    lastUpdated: new Date().toISOString(),
+    isRealData: false,
+    message: 'Enable Business Profile API to see real insights'
   };
 }
 
@@ -441,7 +429,9 @@ export async function GET(request: NextRequest) {
       expiresIn: tokens.expires_in
     }));
 
-    // Return success response
+    // Return success response with real data or clear error
+    const hasRealData = businesses.length > 0 && !businesses[0].isDemo && !businesses[0].setupRequired;
+    
     return new NextResponse(
       buildSuccessResponse({
         access_token: tokens.access_token,
@@ -450,9 +440,10 @@ export async function GET(request: NextRequest) {
         token_type: tokens.token_type,
         user: userInfo,
         businesses,
-        insights: realInsights || generateGMBInsights(),
+        insights: realInsights || generateEmptyInsights(),
         expiresAt: Date.now() + (tokens.expires_in * 1000),
-        apiStatus
+        apiStatus,
+        hasRealData
       }),
       {
         status: 200,
@@ -608,7 +599,7 @@ function buildErrorResponse(error: string, description: string): string {
 </html>`;
 }
 
-// Build demo mode response
+// Build demo mode response - show clear message that API setup is needed
 function buildDemoResponse(): string {
   const demoData = {
     access_token: `demo_gmb_access_${Date.now()}`,
@@ -616,9 +607,22 @@ function buildDemoResponse(): string {
     expires_in: 3600,
     token_type: 'Bearer',
     user: { email: 'demo@trafficflow.io', name: 'Demo User' },
-    businesses: DEMO_BUSINESSES,
-    insights: generateGMBInsights(),
-    expiresAt: Date.now() + 3600000
+    businesses: [{
+      id: 'setup_required',
+      name: 'API Setup Required',
+      address: 'Enable Business Profile API in Google Cloud Console',
+      phone: 'N/A',
+      category: 'Setup Required',
+      website: 'https://console.cloud.google.com/apis/library/mybusiness.googleapis.com',
+      rating: 0,
+      totalReviews: 0,
+      isDemo: true,
+      setupRequired: true
+    }],
+    insights: generateEmptyInsights(),
+    expiresAt: Date.now() + 3600000,
+    apiStatus: 'demo',
+    hasRealData: false
   };
 
   return `<!DOCTYPE html>

@@ -12707,83 +12707,81 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                     <span className="text-xs text-slate-400">Account: {gmbTokens.userEmail}</span>
                   )}
                 </div>
+                {/* Business Selection */}
                 <div className="space-y-3">
-                  {(gmbBusinesses.length > 0 ? gmbBusinesses : [
-                    { id: '1', name: 'TrafficFlow SEO Agency', address: '123 Marketing St, New York, NY 10001', phone: '+1 (555) 123-4567', category: 'Marketing Agency' },
-                    { id: '2', name: 'Digital Marketing Pro', address: '456 Business Ave, Los Angeles, CA 90001', phone: '+1 (555) 987-6543', category: 'Internet Marketing Service' },
-                  ]).map((business: any) => (
-                    <div 
-                      key={business.id}
-                      onClick={async () => {
-                        setSelectedGmbBusiness(business.id);
-                        setGmbLoading(true);
-                        
-                        // If this is a real business (not demo), try to fetch real insights
-                        if (!business.isDemo && gmbTokens.accessToken) {
-                          try {
-                            const response = await fetch('/api/gmb/insights', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                accessToken: gmbTokens.accessToken,
-                                businessId: business.id,
-                                accountName: business.accountName
-                              })
-                            });
-                            const data = await response.json();
-                            
-                            if (data.success) {
-                              // Use real data if available, otherwise use business data
-                              const realInsights = data.insights;
-                              setGmbData({
-                                views: realInsights?.views || 0,
-                                searches: realInsights?.searches || 0,
-                                actions: 0,
-                                directionRequests: realInsights?.directionRequests || 0,
-                                callClicks: realInsights?.callClicks || 0,
-                                websiteClicks: realInsights?.websiteClicks || 0,
-                                reviews: realInsights?.reviews || { 
-                                  total: business.totalReviews || 0, 
-                                  average: business.rating || 0, 
-                                  distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } 
-                                },
-                                photos: 0,
-                                posts: 0,
-                                qanda: 0
+                  {gmbBusinesses.length > 0 ? (
+                    gmbBusinesses.map((business: any) => (
+                      <div 
+                        key={business.id}
+                        onClick={async () => {
+                          setSelectedGmbBusiness(business.id);
+                          setGmbLoading(true);
+                          
+                          // If this is a real business (not demo), try to fetch real insights
+                          if (!business.isDemo && gmbTokens.accessToken) {
+                            try {
+                              const response = await fetch('/api/gmb/insights', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  accessToken: gmbTokens.accessToken,
+                                  businessId: business.id,
+                                  accountName: business.accountName
+                                })
                               });
-                              setGmbLoading(false);
-                              addToast?.('Real business data loaded!', 'success');
-                              return;
+                              const data = await response.json();
+                              
+                              if (data.success) {
+                                // Use real data if available, otherwise use business data
+                                const realInsights = data.insights;
+                                setGmbData({
+                                  views: realInsights?.views || 0,
+                                  searches: realInsights?.searches || 0,
+                                  actions: 0,
+                                  directionRequests: realInsights?.directionRequests || 0,
+                                  callClicks: realInsights?.callClicks || 0,
+                                  websiteClicks: realInsights?.websiteClicks || 0,
+                                  reviews: realInsights?.reviews || { 
+                                    total: business.totalReviews || 0, 
+                                    average: business.rating || 0, 
+                                    distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } 
+                                  },
+                                  photos: 0,
+                                  posts: 0,
+                                  qanda: 0
+                                });
+                                setGmbLoading(false);
+                                addToast?.('Real business data loaded!', 'success');
+                                return;
+                              }
+                            } catch (e) {
+                              console.log('Could not fetch real insights:', e);
                             }
-                          } catch (e) {
-                            console.log('Could not fetch real insights:', e);
                           }
-                        }
-                        
-                        // If business has rating/reviews from API, use them
-                        if (business.rating || business.totalReviews) {
-                          setGmbData({
-                            views: 0,
-                            searches: 0,
-                            actions: 0,
-                            directionRequests: 0,
-                            callClicks: 0,
-                            websiteClicks: 0,
-                            reviews: { 
-                              total: business.totalReviews || 0, 
-                              average: business.rating || 0, 
-                              distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } 
-                            },
-                            photos: 0,
-                            posts: 0,
-                            qanda: 0
-                          });
-                          setGmbLoading(false);
-                          return;
-                        }
-                        
-                        // Fallback - show empty state for demo
-                        setTimeout(() => {
+                          
+                          // If business has rating/reviews from API, use them
+                          if (business.rating || business.totalReviews) {
+                            setGmbData({
+                              views: 0,
+                              searches: 0,
+                              actions: 0,
+                              directionRequests: 0,
+                              callClicks: 0,
+                              websiteClicks: 0,
+                              reviews: { 
+                                total: business.totalReviews || 0, 
+                                average: business.rating || 0, 
+                                distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } 
+                              },
+                              photos: 0,
+                              posts: 0,
+                              qanda: 0
+                            });
+                            setGmbLoading(false);
+                            return;
+                          }
+                          
+                          // No data available - show empty state
                           setGmbData({
                             views: 0,
                             searches: 0,
@@ -12797,42 +12795,62 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                             qanda: 0
                           });
                           setGmbLoading(false);
-                        }, 500);
-                      }}
-                      className="p-4 bg-slate-50 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 border border-transparent transition-all"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold text-slate-800">{business.name}</p>
-                            {business.isDemo && (
-                              <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full">Setup Required</span>
-                            )}
-                            {!business.isDemo && business.rating > 0 && (
-                              <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full flex items-center gap-1">
-                                <Star size={10} className="fill-emerald-500 text-emerald-500" /> {business.rating}
-                              </span>
+                        }}
+                        className="p-4 bg-slate-50 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 border border-transparent transition-all"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                              <Building2 size={24} className="text-emerald-600" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-800">{business.name}</h4>
+                              <p className="text-xs text-slate-500">{business.address}</p>
+                              {business.category && (
+                                <span className="inline-block px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] mt-1">
+                                  {business.category}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            {business.rating > 0 ? (
+                              <>
+                                <div className="flex items-center gap-1">
+                                  <Star size={14} className="text-yellow-400 fill-yellow-400" />
+                                  <span className="font-bold text-slate-800">{business.rating}</span>
+                                </div>
+                                <p className="text-xs text-slate-400">{business.totalReviews} reviews</p>
+                              </>
+                            ) : business.isDemo ? (
+                              <span className="text-xs text-amber-500 font-medium">Setup Required</span>
+                            ) : (
+                              <span className="text-xs text-slate-400">No ratings</span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500">{business.address}</p>
-                          <p className="text-xs text-slate-400">{business.category}</p>
-                          {!business.isDemo && business.totalReviews > 0 && (
-                            <p className="text-xs text-slate-500 mt-1">{business.totalReviews} reviews</p>
-                          )}
                         </div>
-                        <ChevronRight size={20} className="text-slate-400" />
                       </div>
+                    ))
+                  ) : (
+                    <div className="p-8 bg-slate-50 rounded-xl text-center">
+                      <AlertCircle size={32} className="text-slate-400 mx-auto mb-3" />
+                      <h4 className="font-bold text-slate-700 mb-2">No Businesses Found</h4>
+                      <p className="text-xs text-slate-500 mb-4">
+                        {gmbApiStatus === 'limited' 
+                          ? 'Business Profile API requires additional approval from Google. Enable the API in Google Cloud Console to fetch your business listings.'
+                          : 'No business profiles found for this account. Create a business profile on Google to see it here.'}
+                      </p>
+                      <a 
+                        href="https://console.cloud.google.com/apis/library/mybusiness.googleapis.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors inline-flex items-center gap-2"
+                      >
+                        <ExternalLink size={14} /> Enable Business Profile API
+                      </a>
                     </div>
-                  ))}
+                  )}
                 </div>
-                
-                {gmbApiStatus === 'limited' && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                    <p className="text-xs text-blue-600">
-                      <strong>Note:</strong> Business listings shown are placeholders. Enable the Business Profile API in Google Cloud Console to see your actual businesses.
-                    </p>
-                  </div>
-                )}
               </div>
             ) : gmbLoading ? (
               <div className="bg-white p-12 rounded-3xl border shadow-sm text-center">
