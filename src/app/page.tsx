@@ -12193,18 +12193,24 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           const sizeKB = (new Blob([backupStr]).size / 1024).toFixed(1);
                           const fileName = `trafficflow-backup-${new Date().toISOString().split('T')[0]}.json`;
                           
+                          // Determine which cloud storage to use
+                          const storage = cloudStorage.googleDrive.connected ? 'googleDrive' : 'oneDrive';
+                          const accessToken = storage === 'googleDrive' 
+                            ? cloudStorage.googleDrive.accessToken 
+                            : cloudStorage.oneDrive.accessToken;
+                          
+                          if (!accessToken) {
+                            addToast?.(`Please reconnect your ${storage === 'googleDrive' ? 'Google Drive' : 'OneDrive'} account`, 'error');
+                            setCloudBackupLoading(false);
+                            return;
+                          }
+                          
+                          // Try to upload via API
+                          const apiEndpoint = storage === 'googleDrive' 
+                            ? '/api/oauth/google-drive' 
+                            : '/api/oauth/onedrive';
+                          
                           try {
-                            // Determine which cloud storage to use
-                            const storage = cloudStorage.googleDrive.connected ? 'googleDrive' : 'oneDrive';
-                            const accessToken = storage === 'googleDrive' 
-                              ? cloudStorage.googleDrive.accessToken 
-                              : cloudStorage.oneDrive.accessToken;
-                            
-                            // Try to upload via API
-                            const apiEndpoint = storage === 'googleDrive' 
-                              ? '/api/oauth/google-drive' 
-                              : '/api/oauth/onedrive';
-                            
                             const response = await fetch(apiEndpoint, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -12224,27 +12230,30 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                                 name: fileName,
                                 date: new Date().toISOString(),
                                 size: `${sizeKB} KB`,
-                                storage: storage as 'googleDrive' | 'oneDrive'
+                                storage: storage as 'googleDrive' | 'oneDrive',
+                                webViewLink: result.webViewLink
                               };
                               
                               setCloudBackups(prev => [newBackup, ...prev].slice(0, 10));
                               addToast?.(`Backup uploaded to ${storage === 'googleDrive' ? 'Google Drive' : 'OneDrive'}!`, 'success');
                             } else {
-                              throw new Error(result.error || 'Upload failed');
+                              // Show actual error message
+                              addToast?.(result.error || 'Upload failed', 'error');
+                              
+                              // If token expired, prompt to reconnect
+                              if (result.needsReconnect) {
+                                // Clear the stored token
+                                if (storage === 'googleDrive') {
+                                  setCloudStorage(prev => ({
+                                    ...prev,
+                                    googleDrive: { connected: false, email: '', accessToken: '', refreshToken: '', expiresAt: 0 }
+                                  }));
+                                }
+                              }
                             }
                           } catch (error) {
-                            // Fallback: save backup info locally (simulated cloud backup)
-                            const storage = cloudStorage.googleDrive.connected ? 'googleDrive' : 'oneDrive';
-                            const newBackup = {
-                              id: Date.now().toString(),
-                              name: fileName,
-                              date: new Date().toISOString(),
-                              size: `${sizeKB} KB`,
-                              storage: storage as 'googleDrive' | 'oneDrive'
-                            };
-                            
-                            setCloudBackups(prev => [newBackup, ...prev].slice(0, 10));
-                            addToast?.(`Backup saved locally (${storage} sync pending)`, 'info');
+                            const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+                            addToast?.(`Backup failed: ${errorMsg}`, 'error');
                           }
                           
                           setCloudBackupLoading(false);
