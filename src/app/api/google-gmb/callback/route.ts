@@ -14,16 +14,19 @@ import { NextResponse, NextRequest } from "next/server";
  * - https://www.googleapis.com/auth/business.manage
  */
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+// Embedded OAuth credentials for Google Business Profile integration
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '631644678463-7dnm99evrl9g00j16bn39nfdkqh6bqbl.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
 
-// Supported redirect URIs for both Vercel deployments
+// Supported redirect URIs for all deployments
 const ALLOWED_REDIRECT_URIS = [
+  'https://trafficflow-vercel.vercel.app/api/google-gmb/callback',
+  'https://trafficflow-app.netlify.app/api/google-gmb/callback',
   'https://my-project-iota-lilac.vercel.app/api/google-gmb/callback',
   'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/google-gmb/callback',
   // Also support the old oauth path for backward compatibility
-  'https://my-project-iota-lilac.vercel.app/api/oauth/google-business/callback',
-  'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/oauth/google-business/callback',
+  'https://trafficflow-vercel.vercel.app/api/oauth/google-business/callback',
+  'https://trafficflow-app.netlify.app/api/oauth/google-business/callback',
 ];
 
 // Get the correct redirect URI based on the request
@@ -38,7 +41,7 @@ function getRedirectUri(request: NextRequest): string {
   }
   
   // Fallback to primary production URL
-  return 'https://my-project-iota-lilac.vercel.app/api/google-gmb/callback';
+  return 'https://trafficflow-vercel.vercel.app/api/google-gmb/callback';
 }
 
 // Check if OAuth is configured

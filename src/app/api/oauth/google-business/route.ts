@@ -17,28 +17,40 @@ import { NextResponse, NextRequest } from "next/server";
  * - https://www.googleapis.com/auth/business.manage
  */
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+// Embedded OAuth credentials for Google Business Profile integration
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '631644678463-7dnm99evrl9g00j16bn39nfdkqh6bqbl.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
 
-// Service-only scope for Google Business Profile (NO login scopes)
-const GMB_SCOPES = 'https://www.googleapis.com/auth/business.manage';
+// Service-only scope for Google Business Profile + userinfo for email
+const GMB_SCOPES = 'https://www.googleapis.com/auth/business.manage https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
 
-// Supported redirect URIs for both Vercel deployments
+// Supported redirect URIs for all deployments
 const REDIRECT_URIS = {
-  primary: 'https://my-project-iota-lilac.vercel.app/api/google-gmb/callback',
-  backup: 'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/google-gmb/callback'
+  primary: 'https://trafficflow-vercel.vercel.app/api/google-gmb/callback',
+  netlify: 'https://trafficflow-app.netlify.app/api/google-gmb/callback',
+  legacy1: 'https://my-project-iota-lilac.vercel.app/api/google-gmb/callback',
+  legacy2: 'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/google-gmb/callback'
 };
 
 // Get redirect URI based on request host
 function getRedirectUri(request: NextRequest): string {
   const host = request.headers.get('host') || '';
   
-  // Check if request is from backup URL
-  if (host.includes('cabincrewmorocco-beeps-projects')) {
-    return REDIRECT_URIS.backup;
+  // Check if request is from Netlify deployment
+  if (host.includes('trafficflow-app.netlify.app')) {
+    return REDIRECT_URIS.netlify;
   }
   
-  // Default to primary URL
+  // Check if request is from legacy Vercel deployments
+  if (host.includes('cabincrewmorocco-beeps-projects')) {
+    return REDIRECT_URIS.legacy2;
+  }
+  
+  if (host.includes('my-project-iota-lilac')) {
+    return REDIRECT_URIS.legacy1;
+  }
+  
+  // Default to primary TrafficFlow Vercel URL
   return REDIRECT_URIS.primary;
 }
 
@@ -184,15 +196,15 @@ export async function GET(request: NextRequest) {
           '6. Configure OAuth consent screen (External/Internal)',
           '7. Add these Authorized redirect URIs:',
           `   - ${REDIRECT_URIS.primary}`,
-          `   - ${REDIRECT_URIS.backup}`,
+          `   - ${REDIRECT_URIS.netlify}`,
           '8. Copy Client ID and Client Secret to Vercel environment variables',
           '9. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel'
         ],
-        redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+        redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
         requiredScopes: [GMB_SCOPES],
         clientType: 'Web application'
       } : null,
-      redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+      redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
       scopes: [GMB_SCOPES]
     });
   }
@@ -218,10 +230,10 @@ export async function GET(request: NextRequest) {
             '5. Select "Web application" as application type',
             '6. Add Authorized redirect URIs:',
             `   - ${REDIRECT_URIS.primary}`,
-            `   - ${REDIRECT_URIS.backup}`,
+            `   - ${REDIRECT_URIS.netlify}`,
             '7. Copy Client ID and Client Secret to Vercel environment variables'
           ],
-          redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+          redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
           requiredScopes: [GMB_SCOPES]
         },
         businesses: DEMO_BUSINESSES
@@ -543,7 +555,7 @@ export async function GET(request: NextRequest) {
     configured: isOAuthConfigured(),
     actions: ['status', 'authorize', 'callback', 'refresh', 'insights', 'reviews', 'local-rankings', 'competitors'],
     callbackRoute: '/api/google-gmb/callback',
-    redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+    redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
     scopes: [GMB_SCOPES],
     clientType: 'Web application',
     setup: {
