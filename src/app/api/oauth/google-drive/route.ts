@@ -22,10 +22,12 @@ import { NextResponse, NextRequest } from "next/server";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '631644678463-7dnm99evrl9g00j16bn39nfdkqh6bqbl.apps.googleusercontent.com';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
 
-// Service-only scopes for Google Drive (NO login scopes)
+// Service-only scopes for Google Drive + User info for email
 const GOOGLE_DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive',
-  'https://www.googleapis.com/auth/drive.file'
+  'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'https://www.googleapis.com/auth/userinfo.profile'
 ].join(' ');
 
 // Supported redirect URIs for all deployments
