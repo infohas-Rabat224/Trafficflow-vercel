@@ -66,26 +66,18 @@ function logOAuthError(errorType: string, details: Record<string, unknown>): voi
 }
 
 // Sample business data for demo mode
+// Note: Real business data requires Google Business Profile API approval
+// Apply at: https://developers.google.com/my-business/content/prereqs
 const DEMO_BUSINESSES = [
   {
     id: '1',
-    name: 'TrafficFlow SEO Agency',
-    address: '123 Marketing St, New York, NY 10001',
-    phone: '+1 (555) 123-4567',
-    category: 'Marketing Agency',
-    website: 'https://trafficflow.io',
-    rating: 4.8,
-    totalReviews: 127
-  },
-  {
-    id: '2',
-    name: 'Digital Marketing Pro',
-    address: '456 Business Ave, Los Angeles, CA 90001',
-    phone: '+1 (555) 987-6543',
-    category: 'Internet Marketing Service',
-    website: 'https://digitalmarketingpro.com',
-    rating: 4.6,
-    totalReviews: 89
+    name: 'Your Business (API Access Required)',
+    address: 'Enable Business Profile API to see real data',
+    phone: 'See Google Business Profile',
+    category: 'Requires API Approval',
+    website: 'https://console.cloud.google.com/apis/library',
+    rating: 0,
+    totalReviews: 0
   }
 ];
 
