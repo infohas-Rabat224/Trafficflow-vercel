@@ -233,9 +233,10 @@ export async function GET(request: NextRequest) {
     // Get business accounts using the Business Profile API
     let businesses = DEMO_BUSINESSES;
     let userInfo = { email: 'user@gmail.com', name: 'Google User' };
+    let apiStatus = 'limited'; // Track API access status
 
     try {
-      // Get user info
+      // Get user info - this always works with userinfo.email scope
       const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
         headers: {
           'Authorization': `Bearer ${tokens.access_token}`,
@@ -250,7 +251,7 @@ export async function GET(request: NextRequest) {
         };
       }
 
-      // Get business accounts
+      // Get business accounts - requires business.manage scope
       const accountsResponse = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
         headers: {
           'Authorization': `Bearer ${tokens.access_token}`,
@@ -267,12 +268,41 @@ export async function GET(request: NextRequest) {
             phone: acc.phoneNumber || 'N/A',
             category: acc.type || 'Business',
             rating: 0,
-            totalReviews: 0
+            totalReviews: 0,
+            isDemo: false
           }));
+          apiStatus = 'available';
         }
+      } else {
+        // API call failed - likely permission issue
+        console.log('Business Profile API returned error:', accountsResponse.status);
+        // Show the connected user's email with an explanation
+        businesses = [{
+          id: 'api_limited_' + Date.now(),
+          name: userInfo.email || 'Connected Account',
+          address: 'Business Profile API requires additional approval from Google',
+          phone: 'N/A',
+          category: 'Limited Access',
+          website: 'https://developers.google.com/my-business/content/prereqs',
+          rating: 0,
+          totalReviews: 0,
+          isDemo: true
+        }];
       }
     } catch (e) {
       console.log('Could not fetch business accounts, using demo data');
+      // Include user email in the business data
+      businesses = [{
+        id: 'api_error_' + Date.now(),
+        name: userInfo.email || 'Connected Account',
+        address: 'Unable to fetch business data - API requires additional permissions',
+        phone: 'N/A',
+        category: 'Limited Access',
+        website: 'https://console.cloud.google.com/apis/library',
+        rating: 0,
+        totalReviews: 0,
+        isDemo: true
+      }];
     }
 
     console.log(JSON.stringify({
@@ -281,6 +311,7 @@ export async function GET(request: NextRequest) {
       action: 'token_exchange_success',
       userEmail: userInfo.email,
       businessCount: businesses.length,
+      apiStatus,
       hasAccessToken: !!tokens.access_token,
       hasRefreshToken: !!tokens.refresh_token,
       expiresIn: tokens.expires_in
@@ -296,7 +327,8 @@ export async function GET(request: NextRequest) {
         user: userInfo,
         businesses,
         insights: generateGMBInsights(),
-        expiresAt: Date.now() + (tokens.expires_in * 1000)
+        expiresAt: Date.now() + (tokens.expires_in * 1000),
+        apiStatus
       }),
       {
         status: 200,
@@ -337,9 +369,11 @@ function buildSuccessResponse(data: {
     category: string;
     rating: number;
     totalReviews: number;
+    isDemo?: boolean;
   }>;
   insights: ReturnType<typeof generateGMBInsights>;
   expiresAt: number;
+  apiStatus?: string;
 }): string {
   return `<!DOCTYPE html>
 <html>
@@ -390,7 +424,8 @@ function buildSuccessResponse(data: {
           user: data.user,
           businesses: data.businesses,
           insights: data.insights,
-          expiresAt: data.expiresAt
+          expiresAt: data.expiresAt,
+          apiStatus: data.apiStatus || 'limited'
         }, '*');
         setTimeout(function() { window.close(); }, 500);
       } else {
