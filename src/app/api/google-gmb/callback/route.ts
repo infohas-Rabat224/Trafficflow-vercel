@@ -231,9 +231,10 @@ export async function GET(request: NextRequest) {
     const tokens = await tokenResponse.json();
 
     // Get business accounts using the Business Profile API
-    let businesses = DEMO_BUSINESSES;
+    let businesses: any[] = [];
     let userInfo = { email: 'user@gmail.com', name: 'Google User' };
-    let apiStatus = 'limited'; // Track API access status
+    let apiStatus = 'limited';
+    let realInsights: any = null;
 
     try {
       // Get user info - this always works with userinfo.email scope
@@ -258,46 +259,169 @@ export async function GET(request: NextRequest) {
         },
       });
       
+      console.log('Accounts API response status:', accountsResponse.status);
+      
       if (accountsResponse.ok) {
         const accountsData = await accountsResponse.json();
+        console.log('Accounts data:', JSON.stringify(accountsData).substring(0, 500));
+        
         if (accountsData.accounts && accountsData.accounts.length > 0) {
-          businesses = accountsData.accounts.map((acc: { name?: string; accountName?: string; phoneNumber?: string; type?: string }) => ({
-            id: acc.name || `acc_${Date.now()}`,
-            name: acc.accountName || 'Business Account',
-            address: 'Address from API',
-            phone: acc.phoneNumber || 'N/A',
-            category: acc.type || 'Business',
-            rating: 0,
-            totalReviews: 0,
-            isDemo: false
-          }));
-          apiStatus = 'available';
+          // Fetch locations for each account
+          for (const account of accountsData.accounts) {
+            try {
+              // Get locations for this account
+              const locationsUrl = `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title,phoneNumbers,categories,storefrontAddress,metadata`;
+              const locationsResponse = await fetch(locationsUrl, {
+                headers: {
+                  'Authorization': `Bearer ${tokens.access_token}`,
+                },
+              });
+              
+              console.log('Locations API response status for', account.name, ':', locationsResponse.status);
+              
+              if (locationsResponse.ok) {
+                const locationsData = await locationsResponse.json();
+                console.log('Locations data:', JSON.stringify(locationsData).substring(0, 500));
+                
+                if (locationsData.locations && locationsData.locations.length > 0) {
+                  for (const location of locationsData.locations) {
+                    // Get reviews and rating for each location
+                    let rating = 0;
+                    let totalReviews = 0;
+                    
+                    try {
+                      // Fetch location metadata including rating
+                      const locationDetailUrl = `https://mybusinessbusinessinformation.googleapis.com/v1/${location.name}?readMask=name,title,phoneNumbers,categories,storefrontAddress,metadata,profile,relationshipData`;
+                      const locationDetailResponse = await fetch(locationDetailUrl, {
+                        headers: {
+                          'Authorization': `Bearer ${tokens.access_token}`,
+                        },
+                      });
+                      
+                      if (locationDetailResponse.ok) {
+                        const locationDetail = await locationDetailResponse.json();
+                        console.log('Location detail:', JSON.stringify(locationDetail).substring(0, 500));
+                        rating = locationDetail.metadata?.averageRating || 0;
+                        totalReviews = locationDetail.metadata?.totalReviewCount || 0;
+                      }
+                    } catch (e) {
+                      console.log('Could not fetch location details');
+                    }
+                    
+                    businesses.push({
+                      id: location.name,
+                      name: location.title || 'Business Location',
+                      address: location.storefrontAddress?.addressLines?.join(', ') || account.postalAddress?.addressLines?.join(', ') || 'Address not available',
+                      phone: location.phoneNumbers?.primaryPhone || account.phoneNumber || 'N/A',
+                      category: location.categories?.primaryCategory?.displayName || account.type || 'Business',
+                      rating: rating,
+                      totalReviews: totalReviews,
+                      isDemo: false,
+                      accountName: account.name
+                    });
+                  }
+                }
+              }
+            } catch (locError) {
+              console.log('Error fetching locations for account:', account.name, locError);
+            }
+          }
+          
+          // If we got businesses, API is available
+          if (businesses.length > 0) {
+            apiStatus = 'available';
+            
+            // Try to fetch real insights
+            try {
+              const insightsUrl = `https://mybusiness.googleapis.com/v4/${businesses[0].accountName}/locations:reportInsights`;
+              const insightsResponse = await fetch(insightsUrl, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${tokens.access_token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  locationNames: [businesses[0].id],
+                  basicRequest: {
+                    metricRequests: [
+                      { metric: 'QUERIES_DIRECT' },
+                      { metric: 'QUERIES_INDIRECT' },
+                      { metric: 'VIEWS_MAPS' },
+                      { metric: 'VIEWS_SEARCH' },
+                      { metric: 'ACTIONS_DRIVING_DIRECTIONS' },
+                      { metric: 'ACTIONS_PHONE' },
+                      { metric: 'ACTIONS_WEBSITE' }
+                    ],
+                    timeRange: {
+                      startTime: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+                      endTime: new Date().toISOString()
+                    }
+                  }
+                })
+              });
+              
+              if (insightsResponse.ok) {
+                const insightsData = await insightsResponse.json();
+                console.log('Insights data received');
+                
+                // Parse insights
+                if (insightsData.locationMetrics) {
+                  const metrics = insightsData.locationMetrics[0]?.metricValues || [];
+                  realInsights = {
+                    views: 0,
+                    searches: 0,
+                    actions: 0,
+                    directionRequests: 0,
+                    callClicks: 0,
+                    websiteClicks: 0,
+                    reviews: { total: businesses[0].totalReviews, average: businesses[0].rating, distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } },
+                    photos: 0,
+                    posts: 0,
+                    qanda: 0
+                  };
+                  
+                  for (const m of metrics) {
+                    const val = m.totalValue?.value || 0;
+                    if (m.metric === 'VIEWS_MAPS' || m.metric === 'VIEWS_SEARCH') realInsights.views += val;
+                    if (m.metric === 'QUERIES_DIRECT' || m.metric === 'QUERIES_INDIRECT') realInsights.searches += val;
+                    if (m.metric === 'ACTIONS_DRIVING_DIRECTIONS') realInsights.directionRequests = val;
+                    if (m.metric === 'ACTIONS_PHONE') realInsights.callClicks = val;
+                    if (m.metric === 'ACTIONS_WEBSITE') realInsights.websiteClicks = val;
+                  }
+                }
+              }
+            } catch (insightsError) {
+              console.log('Could not fetch insights:', insightsError);
+            }
+          }
         }
       } else {
-        // API call failed - likely permission issue
-        console.log('Business Profile API returned error:', accountsResponse.status);
-        // Show the connected user's email with an explanation
+        // API call failed - check error
+        const errorText = await accountsResponse.text();
+        console.log('Business Profile API error:', accountsResponse.status, errorText);
+        
+        // Show the connected user's email with explanation
         businesses = [{
           id: 'api_limited_' + Date.now(),
           name: userInfo.email || 'Connected Account',
-          address: 'Business Profile API requires additional approval from Google',
+          address: 'Business Profile API requires enabling in Google Cloud Console',
           phone: 'N/A',
-          category: 'Limited Access',
-          website: 'https://developers.google.com/my-business/content/prereqs',
+          category: 'Setup Required',
+          website: 'https://console.cloud.google.com/apis/library/mybusiness.googleapis.com',
           rating: 0,
           totalReviews: 0,
-          isDemo: true
+          isDemo: true,
+          setupRequired: true
         }];
       }
     } catch (e) {
-      console.log('Could not fetch business accounts, using demo data');
-      // Include user email in the business data
+      console.log('Could not fetch business accounts:', e);
       businesses = [{
         id: 'api_error_' + Date.now(),
         name: userInfo.email || 'Connected Account',
-        address: 'Unable to fetch business data - API requires additional permissions',
+        address: 'Error fetching business data. Please check API permissions.',
         phone: 'N/A',
-        category: 'Limited Access',
+        category: 'Error',
         website: 'https://console.cloud.google.com/apis/library',
         rating: 0,
         totalReviews: 0,
@@ -326,7 +450,7 @@ export async function GET(request: NextRequest) {
         token_type: tokens.token_type,
         user: userInfo,
         businesses,
-        insights: generateGMBInsights(),
+        insights: realInsights || generateGMBInsights(),
         expiresAt: Date.now() + (tokens.expires_in * 1000),
         apiStatus
       }),

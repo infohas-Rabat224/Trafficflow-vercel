@@ -21,10 +21,10 @@ import { NextResponse, NextRequest } from "next/server";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '631644678463-7dnm99evrl9g00j16bn39nfdkqh6bqbl.apps.googleusercontent.com';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
 
-// Service-only scope for Google Business Profile + userinfo for email
-// Note: business.manage requires Google Business Profile API approval
-// Start with userinfo scopes which always work, then add business.manage after approval
-const GMB_SCOPES = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid';
+// Full scope for Google Business Profile including business.manage
+// Note: business.manage requires Google Business Profile API to be enabled in Google Cloud Console
+// Enable at: https://console.cloud.google.com/apis/library/mybusiness.googleapis.com
+const GMB_SCOPES = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile openid https://www.googleapis.com/auth/business.manage';
 
 // Supported redirect URIs for all deployments
 const REDIRECT_URIS = {

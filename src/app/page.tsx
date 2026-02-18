@@ -12684,49 +12684,83 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         // If this is a real business (not demo), try to fetch real insights
                         if (!business.isDemo && gmbTokens.accessToken) {
                           try {
-                            const response = await fetch('/api/oauth/google-business?action=insights&businessId=' + business.id);
+                            const response = await fetch('/api/gmb/insights', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                accessToken: gmbTokens.accessToken,
+                                businessId: business.id,
+                                accountName: business.accountName
+                              })
+                            });
                             const data = await response.json();
-                            if (data.success && data.insights) {
+                            
+                            if (data.success) {
+                              // Use real data if available, otherwise use business data
+                              const realInsights = data.insights;
                               setGmbData({
-                                views: data.insights.views || 0,
-                                searches: data.insights.searches || 0,
-                                actions: data.insights.actions || 0,
-                                directionRequests: data.insights.directionRequests || 0,
-                                callClicks: data.insights.callClicks || 0,
-                                websiteClicks: data.insights.websiteClicks || 0,
-                                reviews: data.insights.reviews || { total: 0, average: 0, distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } },
-                                photos: data.insights.photos || 0,
-                                posts: data.insights.posts || 0,
-                                qanda: data.insights.qanda || 0
+                                views: realInsights?.views || 0,
+                                searches: realInsights?.searches || 0,
+                                actions: 0,
+                                directionRequests: realInsights?.directionRequests || 0,
+                                callClicks: realInsights?.callClicks || 0,
+                                websiteClicks: realInsights?.websiteClicks || 0,
+                                reviews: realInsights?.reviews || { 
+                                  total: business.totalReviews || 0, 
+                                  average: business.rating || 0, 
+                                  distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } 
+                                },
+                                photos: 0,
+                                posts: 0,
+                                qanda: 0
                               });
                               setGmbLoading(false);
+                              addToast?.('Real business data loaded!', 'success');
                               return;
                             }
                           } catch (e) {
-                            console.log('Could not fetch real insights, using demo data');
+                            console.log('Could not fetch real insights:', e);
                           }
                         }
                         
-                        // Fallback to demo data
-                        setTimeout(() => {
+                        // If business has rating/reviews from API, use them
+                        if (business.rating || business.totalReviews) {
                           setGmbData({
-                            views: 12847 + Math.floor(Math.random() * 1000),
-                            searches: 3892 + Math.floor(Math.random() * 300),
-                            actions: 156 + Math.floor(Math.random() * 30),
-                            directionRequests: 89 + Math.floor(Math.random() * 20),
-                            callClicks: 67 + Math.floor(Math.random() * 15),
-                            websiteClicks: 134 + Math.floor(Math.random() * 25),
+                            views: 0,
+                            searches: 0,
+                            actions: 0,
+                            directionRequests: 0,
+                            callClicks: 0,
+                            websiteClicks: 0,
                             reviews: { 
-                              total: 127 + Math.floor(Math.random() * 10), 
-                              average: 4.8, 
-                              distribution: { 5: 98, 4: 21, 3: 5, 2: 2, 1: 1 } 
+                              total: business.totalReviews || 0, 
+                              average: business.rating || 0, 
+                              distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } 
                             },
-                            photos: 45 + Math.floor(Math.random() * 5),
-                            posts: 12 + Math.floor(Math.random() * 3),
-                            qanda: 8 + Math.floor(Math.random() * 2)
+                            photos: 0,
+                            posts: 0,
+                            qanda: 0
                           });
                           setGmbLoading(false);
-                        }, 1000);
+                          return;
+                        }
+                        
+                        // Fallback - show empty state for demo
+                        setTimeout(() => {
+                          setGmbData({
+                            views: 0,
+                            searches: 0,
+                            actions: 0,
+                            directionRequests: 0,
+                            callClicks: 0,
+                            websiteClicks: 0,
+                            reviews: { total: 0, average: 0, distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 } },
+                            photos: 0,
+                            posts: 0,
+                            qanda: 0
+                          });
+                          setGmbLoading(false);
+                        }, 500);
                       }}
                       className="p-4 bg-slate-50 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 border border-transparent transition-all"
                     >
@@ -12735,11 +12769,19 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           <div className="flex items-center gap-2">
                             <p className="font-bold text-slate-800">{business.name}</p>
                             {business.isDemo && (
-                              <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full">Demo</span>
+                              <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-600 rounded-full">Setup Required</span>
+                            )}
+                            {!business.isDemo && business.rating > 0 && (
+                              <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded-full flex items-center gap-1">
+                                <Star size={10} className="fill-emerald-500 text-emerald-500" /> {business.rating}
+                              </span>
                             )}
                           </div>
                           <p className="text-xs text-slate-500">{business.address}</p>
                           <p className="text-xs text-slate-400">{business.category}</p>
+                          {!business.isDemo && business.totalReviews > 0 && (
+                            <p className="text-xs text-slate-500 mt-1">{business.totalReviews} reviews</p>
+                          )}
                         </div>
                         <ChevronRight size={20} className="text-slate-400" />
                       </div>
