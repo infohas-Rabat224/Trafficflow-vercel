@@ -15,16 +15,19 @@ import { NextResponse, NextRequest } from "next/server";
  * - https://www.googleapis.com/auth/drive.file
  */
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+// Embedded OAuth credentials for Google Drive integration
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '713066368439-6e1c69q4p0p6ujid3adajn7qecuj6038.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
 
-// Supported redirect URIs for both Vercel deployments
+// Supported redirect URIs for all deployments
 const ALLOWED_REDIRECT_URIS = [
+  'https://trafficflow-vercel.vercel.app/api/google-drive/callback',
+  'https://trafficflow-app.netlify.app/api/google-drive/callback',
   'https://my-project-iota-lilac.vercel.app/api/google-drive/callback',
   'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/google-drive/callback',
   // Also support the old oauth path for backward compatibility
-  'https://my-project-iota-lilac.vercel.app/api/oauth/google-drive/callback',
-  'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/oauth/google-drive/callback',
+  'https://trafficflow-vercel.vercel.app/api/oauth/google-drive/callback',
+  'https://trafficflow-app.netlify.app/api/oauth/google-drive/callback',
 ];
 
 // Get the correct redirect URI based on the request
@@ -39,7 +42,7 @@ function getRedirectUri(request: NextRequest): string {
   }
   
   // Fallback to primary production URL
-  return 'https://my-project-iota-lilac.vercel.app/api/google-drive/callback';
+  return 'https://trafficflow-vercel.vercel.app/api/google-drive/callback';
 }
 
 // Check if OAuth is configured

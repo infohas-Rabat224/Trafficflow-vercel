@@ -18,8 +18,9 @@ import { NextResponse, NextRequest } from "next/server";
  * - https://www.googleapis.com/auth/drive.file
  */
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+// Embedded OAuth credentials for Google Drive integration
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '713066368439-6e1c69q4p0p6ujid3adajn7qecuj6038.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
 
 // Service-only scopes for Google Drive (NO login scopes)
 const GOOGLE_DRIVE_SCOPES = [
@@ -27,22 +28,33 @@ const GOOGLE_DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive.file'
 ].join(' ');
 
-// Supported redirect URIs for both Vercel deployments
+// Supported redirect URIs for all deployments
 const REDIRECT_URIS = {
-  primary: 'https://my-project-iota-lilac.vercel.app/api/google-drive/callback',
-  backup: 'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/google-drive/callback'
+  primary: 'https://trafficflow-vercel.vercel.app/api/google-drive/callback',
+  netlify: 'https://trafficflow-app.netlify.app/api/google-drive/callback',
+  legacy1: 'https://my-project-iota-lilac.vercel.app/api/google-drive/callback',
+  legacy2: 'https://my-project-cabincrewmorocco-beeps-projects.vercel.app/api/google-drive/callback'
 };
 
 // Get redirect URI based on request host
 function getRedirectUri(request: NextRequest): string {
   const host = request.headers.get('host') || '';
   
-  // Check if request is from backup URL
-  if (host.includes('cabincrewmorocco-beeps-projects')) {
-    return REDIRECT_URIS.backup;
+  // Check if request is from Netlify deployment
+  if (host.includes('trafficflow-app.netlify.app')) {
+    return REDIRECT_URIS.netlify;
   }
   
-  // Default to primary URL
+  // Check if request is from legacy Vercel deployments
+  if (host.includes('cabincrewmorocco-beeps-projects')) {
+    return REDIRECT_URIS.legacy2;
+  }
+  
+  if (host.includes('my-project-iota-lilac')) {
+    return REDIRECT_URIS.legacy1;
+  }
+  
+  // Default to primary TrafficFlow Vercel URL
   return REDIRECT_URIS.primary;
 }
 
@@ -106,15 +118,15 @@ export async function GET(request: NextRequest) {
           '6. Configure OAuth consent screen (External/Internal)',
           '7. Add these Authorized redirect URIs:',
           `   - ${REDIRECT_URIS.primary}`,
-          `   - ${REDIRECT_URIS.backup}`,
+          `   - ${REDIRECT_URIS.netlify}`,
           '8. Copy Client ID and Client Secret to Vercel environment variables',
           '9. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel'
         ],
-        redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+        redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
         requiredScopes: GOOGLE_DRIVE_SCOPES.split(' '),
         clientType: 'Web application'
       } : null,
-      redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+      redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
       scopes: GOOGLE_DRIVE_SCOPES.split(' ')
     });
   }
@@ -140,10 +152,10 @@ export async function GET(request: NextRequest) {
             '5. Select "Web application" as application type',
             '6. Add Authorized redirect URIs:',
             `   - ${REDIRECT_URIS.primary}`,
-            `   - ${REDIRECT_URIS.backup}`,
+            `   - ${REDIRECT_URIS.netlify}`,
             '7. Copy Client ID and Client Secret to Vercel environment variables'
           ],
-          redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+          redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
           requiredScopes: GOOGLE_DRIVE_SCOPES.split(' ')
         },
         tokens: {
@@ -501,7 +513,7 @@ export async function GET(request: NextRequest) {
     configured: isOAuthConfigured(),
     actions: ['status', 'authorize', 'callback', 'refresh', 'test', 'list-files'],
     callbackRoute: '/api/google-drive/callback',
-    redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.backup],
+    redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
     scopes: GOOGLE_DRIVE_SCOPES.split(' '),
     clientType: 'Web application',
     setup: {
