@@ -12198,6 +12198,16 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           const accessToken = storage === 'googleDrive' 
                             ? cloudStorage.googleDrive.accessToken 
                             : cloudStorage.oneDrive.accessToken;
+                          const refreshToken = storage === 'googleDrive' 
+                            ? cloudStorage.googleDrive.refreshToken 
+                            : cloudStorage.oneDrive.refreshToken;
+                          
+                          // Check if using demo token before attempting upload
+                          if (accessToken && accessToken.startsWith('demo_')) {
+                            addToast?.('You are using a demo connection. Please reconnect Google Drive with a real account to backup your data.', 'error');
+                            setCloudBackupLoading(false);
+                            return;
+                          }
                           
                           if (!accessToken) {
                             addToast?.(`Please reconnect your ${storage === 'googleDrive' ? 'Google Drive' : 'OneDrive'} account`, 'error');
@@ -12217,6 +12227,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                               body: JSON.stringify({
                                 action: 'upload',
                                 accessToken,
+                                refreshToken,
                                 fileName,
                                 fileContent: backupStr
                               })
@@ -12225,6 +12236,18 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                             const result = await response.json();
                             
                             if (result.success) {
+                              // If API returned a new access token, update it
+                              if (result.newAccessToken && storage === 'googleDrive') {
+                                setCloudStorage(prev => ({
+                                  ...prev,
+                                  googleDrive: {
+                                    ...prev.googleDrive,
+                                    accessToken: result.newAccessToken,
+                                    expiresAt: result.newExpiresAt || Date.now() + 3600000
+                                  }
+                                }));
+                              }
+                              
                               const newBackup = {
                                 id: result.fileId || Date.now().toString(),
                                 name: fileName,
@@ -12240,8 +12263,8 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                               // Show actual error message
                               addToast?.(result.error || 'Upload failed', 'error');
                               
-                              // If token expired, prompt to reconnect
-                              if (result.needsReconnect) {
+                              // If token expired or demo token, prompt to reconnect
+                              if (result.needsReconnect || result.isDemoToken) {
                                 // Clear the stored token
                                 if (storage === 'googleDrive') {
                                   setCloudStorage(prev => ({
@@ -12458,6 +12481,11 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       <div className="p-3 bg-white rounded-lg">
                         <p className="text-xs text-slate-600"><strong>Connected Account:</strong></p>
                         <p className="text-sm font-bold text-slate-700">{cloudStorage.googleDrive.email}</p>
+                        {cloudStorage.googleDrive.accessToken && cloudStorage.googleDrive.accessToken.startsWith('demo_') && (
+                          <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                            <p className="text-xs text-amber-700 font-medium">⚠️ Demo Connection - Reconnect with real account for actual backups</p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <button 

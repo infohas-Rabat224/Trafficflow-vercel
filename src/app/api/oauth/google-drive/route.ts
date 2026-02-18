@@ -528,7 +528,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, accessToken, fileName, fileContent, fileId, folderId } = body;
+    const { action, accessToken, refreshToken, fileName, fileContent, fileId, folderId } = body;
     
     // Upload file to Google Drive
     if (action === 'upload') {
@@ -547,8 +547,23 @@ export async function POST(request: NextRequest) {
         }, { status: 401 });
       }
       
+      // Check if using a demo token - these cannot upload to real Google Drive
+      if (accessToken.startsWith('demo_')) {
+        logOAuthEvent('upload_blocked_demo_token', {
+          tokenPrefix: accessToken.substring(0, 20) + '...'
+        });
+        
+        return NextResponse.json({
+          success: false,
+          error: 'You are using a demo connection. Please reconnect Google Drive with a real account to backup your data.',
+          needsReconnect: true,
+          isDemoToken: true
+        }, { status: 401 });
+      }
+      
       if (isOAuthConfigured()) {
-        try {
+        // Helper function to attempt upload with token
+        async function attemptUpload(token: string): Promise<{ success: boolean; result?: any; error?: any; status?: number }> {
           // Create file metadata
           const metadata: Record<string, unknown> = {
             name: fileName,
@@ -574,37 +589,21 @@ export async function POST(request: NextRequest) {
             `--${boundary}--`
           ].join('\r\n');
           
-          console.log('Uploading to Google Drive:', { fileName, hasAccessToken: !!accessToken });
-          
           const uploadResponse = await fetch(
             'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
             {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${accessToken}`,
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': `multipart/related; boundary=${boundary}`
               },
               body: multipartBody
             }
           );
           
-          console.log('Google Drive upload response status:', uploadResponse.status);
-          
           if (uploadResponse.ok) {
             const result = await uploadResponse.json();
-            
-            logOAuthEvent('file_upload_success', {
-              fileName,
-              fileId: result.id
-            });
-            
-            return NextResponse.json({
-              success: true,
-              fileId: result.id,
-              fileName: result.name,
-              webViewLink: `https://drive.google.com/file/d/${result.id}/view`,
-              message: 'File uploaded to Google Drive successfully'
-            });
+            return { success: true, result };
           } else {
             const errorText = await uploadResponse.text();
             let errorData;
@@ -613,28 +612,94 @@ export async function POST(request: NextRequest) {
             } catch {
               errorData = { raw: errorText };
             }
+            return { success: false, error: errorData, status: uploadResponse.status };
+          }
+        }
+        
+        try {
+          console.log('Uploading to Google Drive:', { fileName, hasAccessToken: !!accessToken });
+          
+          // First attempt with current token
+          let uploadResult = await attemptUpload(accessToken);
+          
+          // If token expired and we have refresh token, try to refresh and retry
+          if (!uploadResult.success && uploadResult.status === 401 && refreshToken) {
+            console.log('Token expired, attempting refresh...');
             
-            console.error('Google Drive upload failed:', errorData);
+            try {
+              const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                  refresh_token: refreshToken,
+                  client_id: GOOGLE_CLIENT_ID,
+                  client_secret: GOOGLE_CLIENT_SECRET,
+                  grant_type: 'refresh_token',
+                }).toString(),
+              });
+              
+              if (refreshResponse.ok) {
+                const newTokens = await refreshResponse.json();
+                console.log('Token refreshed successfully, retrying upload...');
+                
+                // Retry upload with new token
+                uploadResult = await attemptUpload(newTokens.access_token);
+                
+                if (uploadResult.success) {
+                  // Return success with new token so frontend can update it
+                  return NextResponse.json({
+                    success: true,
+                    fileId: uploadResult.result.id,
+                    fileName: uploadResult.result.name,
+                    webViewLink: `https://drive.google.com/file/d/${uploadResult.result.id}/view`,
+                    message: 'File uploaded to Google Drive successfully',
+                    newAccessToken: newTokens.access_token,
+                    newExpiresAt: Date.now() + (newTokens.expires_in * 1000)
+                  });
+                }
+              }
+            } catch (refreshError) {
+              console.error('Token refresh failed:', refreshError);
+            }
+          }
+          
+          if (uploadResult.success) {
+            logOAuthEvent('file_upload_success', {
+              fileName,
+              fileId: uploadResult.result.id
+            });
+            
+            return NextResponse.json({
+              success: true,
+              fileId: uploadResult.result.id,
+              fileName: uploadResult.result.name,
+              webViewLink: `https://drive.google.com/file/d/${uploadResult.result.id}/view`,
+              message: 'File uploaded to Google Drive successfully'
+            });
+          } else {
+            console.error('Google Drive upload failed:', uploadResult.error);
             
             logOAuthEvent('file_upload_failed', {
-              status: uploadResponse.status,
-              error: errorData
+              status: uploadResult.status,
+              error: uploadResult.error
             });
             
             // Check if token expired
-            if (uploadResponse.status === 401) {
+            if (uploadResult.status === 401) {
               return NextResponse.json({
                 success: false,
-                error: 'Google Drive access token expired. Please reconnect.',
+                error: 'Google Drive access token expired. Please reconnect your Google Drive account.',
                 needsReconnect: true,
-                details: errorData
+                details: uploadResult.error
               }, { status: 401 });
             }
             
             return NextResponse.json({
               success: false,
-              error: errorData.error?.message || 'Failed to upload to Google Drive',
-              details: errorData
+              error: uploadResult.error?.error?.message || 'Failed to upload to Google Drive',
+              details: uploadResult.error
             }, { status: 400 });
           }
         } catch (e) {
