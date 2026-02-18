@@ -32,13 +32,24 @@ function generateCSRFToken(): string {
 }
 
 // In-memory user store (persists during serverless function lifetime)
-// In production, use Vercel KV, Postgres, or external database
-let usersStore: Map<string, any> = new Map();
+// Shared with auth/login API via global variable
+declare global {
+  var usersStoreGlobal: Map<string, any> | undefined;
+}
+
+function getUsersStore(): Map<string, any> {
+  if (!global.usersStoreGlobal) {
+    global.usersStoreGlobal = new Map();
+  }
+  return global.usersStoreGlobal;
+}
+
 let csrfTokens: Set<string> = new Set();
 
 // Initialize with default admin if empty
 async function initializeStore() {
-  if (usersStore.size === 0) {
+  const store = getUsersStore();
+  if (store.size === 0) {
     const defaultAdmin = {
       id: 'user_default_admin',
       full_name: 'Ranelsabah Admin',
@@ -51,7 +62,7 @@ async function initializeStore() {
       updated_at: new Date().toISOString(),
       last_login: null
     };
-    usersStore.set(defaultAdmin.id, defaultAdmin);
+    store.set(defaultAdmin.id, defaultAdmin);
   }
 }
 
@@ -66,7 +77,8 @@ async function verifyAdmin(request: NextRequest): Promise<{ authorized: boolean;
     }
     
     // Find user by session token (in production, use proper session management)
-    const users = Array.from(usersStore.values());
+    const store = getUsersStore();
+    const users = Array.from(store.values());
     const adminUser = users.find((u: any) => u.id === sessionToken || u.username === sessionToken);
     
     if (!adminUser || adminUser.role !== 'admin' || adminUser.status !== 'active') {
@@ -126,8 +138,9 @@ export async function GET(request: NextRequest) {
   
   // Get single user
   const userId = searchParams.get('id');
+  const store = getUsersStore();
   if (userId) {
-    const user = usersStore.get(userId);
+    const user = store.get(userId);
     if (!user) {
       return NextResponse.json({
         success: false,
@@ -150,7 +163,7 @@ export async function GET(request: NextRequest) {
   const sortBy = searchParams.get('sortBy') || 'created_at';
   const sortOrder = searchParams.get('sortOrder') || 'desc';
   
-  let users = Array.from(usersStore.values());
+  let users = Array.from(store.values());
   
   // Search filter
   if (search) {
@@ -246,7 +259,8 @@ export async function POST(request: NextRequest) {
     }
     
     // Check for duplicate username or email
-    const users = Array.from(usersStore.values());
+    const store = getUsersStore();
+    const users = Array.from(store.values());
     if (users.some((u: any) => u.username.toLowerCase() === username.toLowerCase())) {
       return NextResponse.json({
         success: false,
@@ -278,7 +292,7 @@ export async function POST(request: NextRequest) {
       created_by: auth.user?.id || 'system'
     };
     
-    usersStore.set(userId, newUser);
+    store.set(userId, newUser);
     
     // Return user without password hash
     const { password_hash, ...userSafe } = newUser;
@@ -323,7 +337,8 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
     
-    const existingUser = usersStore.get(id);
+    const store = getUsersStore();
+    const existingUser = store.get(id);
     if (!existingUser) {
       return NextResponse.json({
         success: false,
@@ -332,7 +347,7 @@ export async function PUT(request: NextRequest) {
     }
     
     // Check for duplicate username/email (excluding current user)
-    const users = Array.from(usersStore.values());
+    const users = Array.from(store.values());
     if (username && username.toLowerCase() !== existingUser.username.toLowerCase()) {
       if (users.some((u: any) => u.id !== id && u.username.toLowerCase() === username.toLowerCase())) {
         return NextResponse.json({
@@ -404,7 +419,7 @@ export async function PUT(request: NextRequest) {
       updated_by: auth.user?.id || 'system'
     };
     
-    usersStore.set(id, updatedUser);
+    store.set(id, updatedUser);
     
     // Return user without password hash
     const { password_hash, ...userSafe } = updatedUser;
@@ -449,7 +464,8 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
     
-    const existingUser = usersStore.get(userId);
+    const store = getUsersStore();
+    const existingUser = store.get(userId);
     if (!existingUser) {
       return NextResponse.json({
         success: false,
@@ -459,7 +475,7 @@ export async function DELETE(request: NextRequest) {
     
     // Prevent deleting last admin
     if (existingUser.role === 'admin') {
-      const users = Array.from(usersStore.values());
+      const users = Array.from(store.values());
       const adminCount = users.filter((u: any) => u.role === 'admin').length;
       if (adminCount <= 1) {
         return NextResponse.json({
@@ -477,7 +493,7 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
     
-    usersStore.delete(userId);
+    store.delete(userId);
     
     return NextResponse.json({
       success: true,
@@ -495,4 +511,4 @@ export async function DELETE(request: NextRequest) {
 }
 
 // Export for use in other modules
-export { hashPassword, verifyPassword, usersStore };
+export { hashPassword, verifyPassword, getUsersStore };

@@ -21,7 +21,7 @@ function generateSessionToken(): string {
     .join('');
 }
 
-// Global users store
+// Global users store - shared with admin/users API
 declare global {
   var usersStoreGlobal: Map<string, any> | undefined;
 }
@@ -32,6 +32,9 @@ function getUsersStore(): Map<string, any> {
   }
   return global.usersStoreGlobal;
 }
+
+// Export for sharing with other modules
+export { getUsersStore };
 
 // Initialize default admin
 async function initializeDefaultAdmin() {

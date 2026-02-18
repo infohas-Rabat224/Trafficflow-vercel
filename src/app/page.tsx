@@ -4121,25 +4121,51 @@ const MainContent = () => {
     confirmPassword: ''
   });
   
-  const handleLogin = () => {
-    const user = loginUsers.find(u => 
+  const handleLogin = async () => {
+    // First try localStorage (for backwards compatibility)
+    const localUser = loginUsers.find(u => 
       u.username.toLowerCase() === loginUsername.toLowerCase() && 
       u.password === loginPassword &&
       u.status === 'active'
     );
     
-    if (user) {
+    if (localUser) {
       setIsLoggedIn(true);
-      setCurrentUser(user.username);
+      setCurrentUser(localUser.username);
       setLoginError("");
-      // Update last login
       setLoginUsers(prev => prev.map(u => 
-        u.id === user.id 
+        u.id === localUser.id 
           ? { ...u, lastLogin: new Date().toISOString() }
           : u
       ));
-      addToast?.("Welcome back, " + user.full_name + "!", "success");
-    } else {
+      addToast?.("Welcome back, " + localUser.full_name + "!", "success");
+      return;
+    }
+    
+    // Try backend API authentication
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          username: loginUsername, 
+          password: loginPassword 
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.user) {
+        setIsLoggedIn(true);
+        setCurrentUser(data.user.username);
+        setLoginError("");
+        addToast?.("Welcome back, " + data.user.full_name + "!", "success");
+      } else {
+        setLoginError(data.error || "Invalid username or password");
+        addToast?.("Login failed. Please check your credentials.", "error");
+      }
+    } catch (error) {
+      // Fallback to localStorage error message
       setLoginError("Invalid username or password");
       addToast?.("Login failed. Please check your credentials.", "error");
     }
@@ -4203,7 +4229,7 @@ const MainContent = () => {
   };
   
   // Add new login user
-  const handleAddLoginUser = () => {
+  const handleAddLoginUser = async () => {
     if (!newUserData.username.trim() || !newUserData.password.trim() || !newUserData.email.trim() || !newUserData.full_name.trim()) {
       addToast?.("All fields are required", "error");
       return;
@@ -4246,7 +4272,31 @@ const MainContent = () => {
       updatedAt: new Date().toISOString()
     };
     
+    // Add to localStorage
     setLoginUsers(prev => [...prev, newUser]);
+    
+    // Also sync to backend API for serverless authentication
+    try {
+      await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser}`
+        },
+        body: JSON.stringify({
+          full_name: newUser.full_name,
+          username: newUser.username,
+          email: newUser.email,
+          password: newUser.password,
+          role: newUser.role,
+          status: newUser.status
+        })
+      });
+    } catch (e) {
+      // Silent fail - localStorage is the primary source
+      console.log('Could not sync user to backend');
+    }
+    
     setNewUserData({ full_name: '', username: '', email: '', password: '', role: 'user', status: 'active' });
     setShowAddUserModal(false);
     addToast?.(`User "${newUser.full_name}" created successfully`, "success");
