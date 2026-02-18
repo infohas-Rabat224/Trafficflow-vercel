@@ -4854,6 +4854,30 @@ const MainContent = () => {
   const [showGmbConnect, setShowGmbConnect] = useState(false);
   const [gmbLoading, setGmbLoading] = useState(false);
   
+  // ===== LOCAL CITATIONS STATE =====
+  interface LocalCitation {
+    id: string;
+    name: string;
+    status: 'Listed' | 'Pending' | 'Not Listed';
+    accuracy: string;
+    url: string;
+    lastChecked: string;
+    notes: string;
+  }
+  
+  const [localCitations, setLocalCitations] = usePersistentState<LocalCitation[]>('tf_local_citations_v1', [
+    { id: '1', name: 'Yelp', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+    { id: '2', name: 'Yellow Pages', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+    { id: '3', name: 'Better Business Bureau', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+    { id: '4', name: 'Foursquare', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+    { id: '5', name: 'Apple Maps', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+    { id: '6', name: 'Bing Places', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+    { id: '7', name: 'Facebook', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+    { id: '8', name: 'TripAdvisor', status: 'Not Listed', accuracy: 'N/A', url: '', lastChecked: '', notes: '' },
+  ]);
+  const [editingCitation, setEditingCitation] = useState<LocalCitation | null>(null);
+  const [showCitationModal, setShowCitationModal] = useState(false);
+  
   // ===== CLOUD STORAGE STATE =====
   const [cloudStorage, setCloudStorage] = usePersistentState<{
     googleDrive: { connected: boolean; email: string; accessToken: string; refreshToken: string; expiresAt: number };
@@ -12678,22 +12702,27 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
             
             {/* Local Citations */}
             <div className="bg-white p-6 rounded-3xl border shadow-sm">
-              <h3 className="text-sm font-bold uppercase text-slate-500 mb-4 flex items-center gap-2">
-                <Link2 size={16} className="text-purple-500" />
-                Local Citations
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold uppercase text-slate-500 flex items-center gap-2">
+                  <Link2 size={16} className="text-purple-500" />
+                  Local Citations
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">
+                    {localCitations.filter(c => c.status === 'Listed').length}/{localCitations.length} Listed
+                  </span>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {[
-                  { name: 'Yelp', status: 'Listed', accuracy: '100%' },
-                  { name: 'Yellow Pages', status: 'Listed', accuracy: '100%' },
-                  { name: 'Better Business Bureau', status: 'Listed', accuracy: '95%' },
-                  { name: 'Foursquare', status: 'Pending', accuracy: 'N/A' },
-                  { name: 'Apple Maps', status: 'Listed', accuracy: '100%' },
-                  { name: 'Bing Places', status: 'Listed', accuracy: '98%' },
-                  { name: 'Facebook', status: 'Listed', accuracy: '100%' },
-                  { name: 'TripAdvisor', status: 'Not Listed', accuracy: 'N/A' },
-                ].map((citation, i) => (
-                  <div key={i} className="p-4 bg-slate-50 rounded-xl">
+                {localCitations.map((citation) => (
+                  <div 
+                    key={citation.id} 
+                    className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setEditingCitation(citation);
+                      setShowCitationModal(true);
+                    }}
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-bold text-slate-700">{citation.name}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${
@@ -12703,9 +12732,15 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       }`}>{citation.status}</span>
                     </div>
                     <p className="text-xs text-slate-400">Accuracy: {citation.accuracy}</p>
+                    {citation.url && (
+                      <p className="text-[10px] text-blue-500 truncate mt-1">{citation.url}</p>
+                    )}
                   </div>
                 ))}
               </div>
+              <p className="text-[10px] text-slate-400 mt-4 text-center">
+                Click on any citation to update its status and details
+              </p>
             </div>
           </div>
         )}
@@ -14492,6 +14527,119 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
             <p className="text-[10px] text-slate-400 text-center mt-4">
               By connecting, you agree to Microsoft's Terms of Service and Privacy Policy
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Citation Edit Modal */}
+      {showCitationModal && editingCitation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 border border-slate-200">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-800">Edit Citation</h3>
+              <button 
+                onClick={() => {
+                  setShowCitationModal(false);
+                  setEditingCitation(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Directory</label>
+                <input 
+                  type="text" 
+                  value={editingCitation.name}
+                  onChange={(e) => setEditingCitation(prev => prev ? { ...prev, name: e.target.value } : null)}
+                  className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                />
+              </div>
+              
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
+                <select 
+                  value={editingCitation.status}
+                  onChange={(e) => setEditingCitation(prev => prev ? { ...prev, status: e.target.value as 'Listed' | 'Pending' | 'Not Listed' } : null)}
+                  className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                >
+                  <option value="Listed">Listed</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Not Listed">Not Listed</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">NAP Accuracy (%)</label>
+                <select 
+                  value={editingCitation.accuracy}
+                  onChange={(e) => setEditingCitation(prev => prev ? { ...prev, accuracy: e.target.value } : null)}
+                  className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                >
+                  <option value="N/A">N/A</option>
+                  <option value="100%">100%</option>
+                  <option value="98%">98%</option>
+                  <option value="95%">95%</option>
+                  <option value="90%">90%</option>
+                  <option value="85%">85%</option>
+                  <option value="80%">80%</option>
+                  <option value="75%">75%</option>
+                  <option value="70%">70%</option>
+                  <option value="65%">65%</option>
+                  <option value="60%">60%</option>
+                  <option value="55%">55%</option>
+                  <option value="50%">50%</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Listing URL</label>
+                <input 
+                  type="url" 
+                  value={editingCitation.url}
+                  onChange={(e) => setEditingCitation(prev => prev ? { ...prev, url: e.target.value } : null)}
+                  placeholder="https://yelp.com/biz/your-business"
+                  className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                />
+              </div>
+              
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase">Notes</label>
+                <textarea 
+                  value={editingCitation.notes}
+                  onChange={(e) => setEditingCitation(prev => prev ? { ...prev, notes: e.target.value } : null)}
+                  placeholder="Add notes about this citation..."
+                  rows={2}
+                  className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm resize-none"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-3 mt-6">
+              <button 
+                onClick={() => {
+                  setLocalCitations(prev => prev.map(c => c.id === editingCitation.id ? { ...editingCitation, lastChecked: new Date().toISOString() } : c));
+                  setShowCitationModal(false);
+                  setEditingCitation(null);
+                  addToast?.(`Citation "${editingCitation.name}" updated`, 'success');
+                }}
+                className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-bold text-sm hover:bg-purple-700 transition-colors"
+              >
+                Save Changes
+              </button>
+              <button 
+                onClick={() => {
+                  setShowCitationModal(false);
+                  setEditingCitation(null);
+                }}
+                className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
