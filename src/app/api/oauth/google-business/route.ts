@@ -83,78 +83,29 @@ function logOAuthEvent(eventType: string, details: Record<string, unknown>): voi
   }
 }
 
-// Sample business data for demo mode
-// Note: Real business data requires Google Business Profile API approval
-// Apply at: https://developers.google.com/my-business/content/prereqs
-const DEMO_BUSINESSES = [
-  {
-    id: '1',
-    name: 'Your Business (API Access Required)',
-    address: 'Enable Business Profile API to see real data',
-    phone: 'See Google Business Profile',
-    category: 'Requires API Approval',
-    website: 'https://console.cloud.google.com/apis/library',
-    rating: 0,
-    totalReviews: 0
-  }
-];
-
-// Generate GMB insights
-function generateGMBInsights() {
+// Empty insights when API is not available
+// Real data requires Business Profile API
+function generateEmptyInsights() {
   return {
-    views: 12847 + Math.floor(Math.random() * 2000),
-    searches: 3892 + Math.floor(Math.random() * 500),
-    actions: 156 + Math.floor(Math.random() * 50),
-    directionRequests: 89 + Math.floor(Math.random() * 30),
-    callClicks: 67 + Math.floor(Math.random() * 20),
-    websiteClicks: 134 + Math.floor(Math.random() * 40),
+    views: 0,
+    searches: 0,
+    actions: 0,
+    directionRequests: 0,
+    callClicks: 0,
+    websiteClicks: 0,
     reviews: {
-      total: 127 + Math.floor(Math.random() * 10),
-      average: 4.8,
-      distribution: { 5: 98, 4: 21, 3: 5, 2: 2, 1: 1 }
+      total: 0,
+      average: 0,
+      distribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
     },
-    photos: 45 + Math.floor(Math.random() * 10),
-    posts: 12 + Math.floor(Math.random() * 3),
-    qanda: 8 + Math.floor(Math.random() * 3),
-    lastUpdated: new Date().toISOString()
+    photos: 0,
+    posts: 0,
+    qanda: 0,
+    lastUpdated: new Date().toISOString(),
+    isRealData: false,
+    message: 'Enable Business Profile API to see real insights'
   };
 }
-
-// Sample reviews
-const DEMO_REVIEWS = [
-  {
-    id: 'r1',
-    author: 'John Smith',
-    rating: 5,
-    text: 'Excellent service! They helped us improve our local rankings significantly.',
-    date: new Date(Date.now() - 86400000 * 3).toISOString(),
-    replied: true
-  },
-  {
-    id: 'r2',
-    author: 'Sarah Johnson',
-    rating: 5,
-    text: 'Very professional team. Highly recommend for SEO services.',
-    date: new Date(Date.now() - 86400000 * 7).toISOString(),
-    replied: true
-  },
-  {
-    id: 'r3',
-    author: 'Mike Chen',
-    rating: 4,
-    text: 'Good results, would recommend to others looking for SEO help.',
-    date: new Date(Date.now() - 86400000 * 14).toISOString(),
-    replied: false
-  },
-  {
-    id: 'r4',
-    author: 'Emily Davis',
-    rating: 5,
-    text: 'Outstanding work! Our traffic increased by 200% in just 3 months.',
-    date: new Date(Date.now() - 86400000 * 21).toISOString(),
-    replied: true
-  }
-];
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -230,7 +181,7 @@ export async function GET(request: NextRequest) {
           redirectUris: [REDIRECT_URIS.primary, REDIRECT_URIS.netlify],
           requiredScopes: [GMB_SCOPES]
         },
-        businesses: DEMO_BUSINESSES
+        businesses: []
       });
     }
     
@@ -279,8 +230,8 @@ export async function GET(request: NextRequest) {
           email: 'demo@trafficflow.io',
           name: 'Demo User',
         },
-        businesses: DEMO_BUSINESSES,
-        insights: generateGMBInsights(),
+        businesses: [],
+        insights: generateEmptyInsights(),
         expiresAt: Date.now() + 3600000,
         note: 'Demo mode - configure GOOGLE_CLIENT_ID for production'
       });
@@ -342,7 +293,7 @@ export async function GET(request: NextRequest) {
       const tokens = await tokenResponse.json();
       
       // Get business accounts
-      let businesses = DEMO_BUSINESSES;
+      let businesses: any[] = [];
       
       try {
         const accountsResponse = await fetch(
@@ -501,7 +452,7 @@ export async function GET(request: NextRequest) {
   if (action === 'insights') {
     return NextResponse.json({
       success: true,
-      insights: generateGMBInsights(),
+      insights: generateEmptyInsights(),
       businessId
     });
   }
@@ -510,9 +461,9 @@ export async function GET(request: NextRequest) {
   if (action === 'reviews') {
     return NextResponse.json({
       success: true,
-      reviews: DEMO_REVIEWS,
-      total: DEMO_REVIEWS.length,
-      averageRating: DEMO_REVIEWS.reduce((sum, r) => sum + r.rating, 0) / DEMO_REVIEWS.length
+      reviews: [],
+      total: 0,
+      averageRating: 0
     });
   }
   
