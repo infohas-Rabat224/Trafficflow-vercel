@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Missing authorization code
+  // Missing authorization code - could be direct visit or OAuth error
   if (!code) {
     logOAuthError('missing_authorization_code', {
       state,
@@ -99,7 +99,11 @@ export async function GET(request: NextRequest) {
     });
 
     return new NextResponse(
-      buildErrorResponse('invalid_request', 'Authorization code missing'),
+      buildErrorResponse(
+        'invalid_request', 
+        'This page is only meant to be accessed during Google Drive connection. Please connect Google Drive from the Settings page.',
+        false
+      ),
       {
         status: 200,
         headers: { 'Content-Type': 'text/html' }
@@ -184,8 +188,14 @@ export async function GET(request: NextRequest) {
         });
       }
 
+      const isConfigError = errorCode === 'redirect_uri_mismatch' || errorCode === 'invalid_client';
+      
       return new NextResponse(
-        buildErrorResponse(errorCode, errorData.error_description || 'Token exchange failed'),
+        buildErrorResponse(
+          errorCode, 
+          errorData.error_description || 'Token exchange failed',
+          isConfigError
+        ),
         {
           status: 200,
           headers: { 'Content-Type': 'text/html' }
@@ -333,7 +343,23 @@ function buildSuccessResponse(data: {
 }
 
 // Build HTML response for error
-function buildErrorResponse(error: string, description: string): string {
+function buildErrorResponse(error: string, description: string, showSetupGuide: boolean = false): string {
+  const setupGuide = showSetupGuide ? `
+    <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(255,255,255,0.1); border-radius: 8px; text-align: left; font-size: 12px;">
+      <p style="font-weight: bold; margin-bottom: 0.5rem;">📋 Setup Instructions:</p>
+      <ol style="margin: 0; padding-left: 1.2rem; line-height: 1.6;">
+        <li>Go to <a href="https://console.cloud.google.com" style="color: #60a5fa;">Google Cloud Console</a></li>
+        <li>Select your project</li>
+        <li>Go to APIs & Services → Credentials</li>
+        <li>Edit your OAuth 2.0 Client ID</li>
+        <li>Add this Authorized redirect URI:</li>
+      </ol>
+      <code style="display: block; margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; word-break: break-all;">
+        https://trafficflow-vercel.vercel.app/api/google-drive/callback
+      </code>
+    </div>
+  ` : '';
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -349,9 +375,11 @@ function buildErrorResponse(error: string, description: string): string {
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       color: white;
     }
-    .container { text-align: center; padding: 2rem; max-width: 400px; }
+    .container { text-align: center; padding: 2rem; max-width: 500px; }
     .error-icon { font-size: 48px; margin-bottom: 1rem; }
     .error-code { color: #f87171; font-size: 14px; margin-top: 1rem; }
+    a { color: #60a5fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -360,6 +388,7 @@ function buildErrorResponse(error: string, description: string): string {
     <h2>Connection Failed</h2>
     <p>${description}</p>
     <p class="error-code">Error: ${error}</p>
+    ${setupGuide}
   </div>
   <script>
     (function() {
@@ -371,7 +400,7 @@ function buildErrorResponse(error: string, description: string): string {
           error: '${error}',
           errorDescription: '${description.replace(/'/g, "\\'")}'
         }, '*');
-        setTimeout(function() { window.close(); }, 2000);
+        setTimeout(function() { window.close(); }, 3000);
       }
     })();
   </script>
