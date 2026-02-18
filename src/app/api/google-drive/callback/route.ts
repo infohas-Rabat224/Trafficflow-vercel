@@ -16,8 +16,8 @@ import { NextResponse, NextRequest } from "next/server";
  */
 
 // Embedded OAuth credentials for Google Drive integration
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '713066368439-6e1c69q4p0p6ujid3adajn7qecuj6038.apps.googleusercontent.com';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '631644678463-7dnm99evrl9g00j16bn39nfdkqh6bqbl.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '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';
 
 // Supported redirect URIs for all deployments
 const ALLOWED_REDIRECT_URIS = [
