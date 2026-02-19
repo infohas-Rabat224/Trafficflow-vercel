@@ -4789,6 +4789,14 @@ const MainContent = () => {
     fromName: 'TrafficFlow'
   });
   
+  // Safe config accessor with defaults
+  const safeEmailConfig = {
+    ...emailConfig,
+    smtp: emailConfig.smtp || { host: '', port: 587, username: '', password: '', encryption: 'tls' as const },
+    imap: emailConfig.imap || { host: '', port: 993, username: '', password: '', useSSL: true },
+    pop: emailConfig.pop || { host: '', port: 995, username: '', password: '', useSSL: true }
+  };
+  
   const [emailFolders, setEmailFolders] = usePersistentState<{
     inbox: { id: string; from: string; fromEmail: string; subject: string; body: string; date: string; read: boolean; starred: boolean }[];
     sent: { id: string; to: string; toEmail: string; subject: string; body: string; date: string }[];
@@ -4808,6 +4816,50 @@ const MainContent = () => {
   const [showComposeEmail, setShowComposeEmail] = useState(false);
   const [composeEmail, setComposeEmail] = useState({ to: '', subject: '', body: '' });
   const [showEmailConfig, setShowEmailConfig] = useState(false);
+  const [emailFetching, setEmailFetching] = useState(false);
+  
+  // Auto-fetch emails when Email Center is active and IMAP is configured
+  useEffect(() => {
+    if (activeTab === 'email-center' && safeEmailConfig.imap?.host && emailFolders.inbox.length === 0 && !emailFetching) {
+      const fetchEmails = async () => {
+        setEmailFetching(true);
+        try {
+          const response = await fetch('/api/email/inbox', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'fetch',
+              config: safeEmailConfig,
+              folder: 'INBOX'
+            })
+          });
+          const result = await response.json();
+          if (result.success && result.emails && result.emails.length > 0) {
+            setEmailFolders(prev => ({
+              ...prev,
+              inbox: result.emails.map((e: any) => ({
+                id: e.id,
+                from: e.from,
+                fromEmail: e.fromEmail,
+                subject: e.subject,
+                body: e.body || '',
+                date: e.date,
+                read: e.read,
+                starred: e.starred
+              }))
+            }));
+          }
+        } catch (e) {
+          console.log('Auto-fetch emails failed:', e);
+        }
+        setEmailFetching(false);
+      };
+      
+      // Delay slightly to let the UI render first
+      const timer = setTimeout(fetchEmails, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, safeEmailConfig.imap?.host]);
   
   // ===== TEAM CENTER STATE =====
   const [teamMembers, setTeamMembers] = usePersistentState<{
@@ -13731,7 +13783,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                     {activeEmailFolder === 'inbox' && (
                       <button
                         onClick={async () => {
-                          if (!emailConfig.imap.host) {
+                          if (!safeEmailConfig.imap?.host) {
                             addToast?.('Configure IMAP settings first', 'error');
                             return;
                           }
@@ -13742,7 +13794,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
                                 action: 'fetch',
-                                config: emailConfig,
+                                config: safeEmailConfig,
                                 folder: 'INBOX'
                               })
                             });
@@ -14038,7 +14090,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                     <div className="text-center">
                       <Mail size={48} className="mx-auto mb-4 opacity-50" />
                       <p>Select an email to read</p>
-                      {emailFolders.inbox.length === 0 && emailConfig.imap.host && (
+                      {emailFolders.inbox.length === 0 && safeEmailConfig.imap?.host && (
                         <button
                           onClick={async () => {
                             addToast?.('Fetching emails...', 'info');
@@ -14048,7 +14100,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                   action: 'fetch',
-                                  config: emailConfig,
+                                  config: safeEmailConfig,
                                   folder: 'INBOX'
                                 })
                               });
@@ -14096,7 +14148,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   { name: 'Outlook', icon: '📤', status: emailConfig.provider === 'outlook' ? 'connected' : 'disconnected' },
                   { name: 'SendGrid', icon: '📨', status: emailConfig.sendgridApiKey ? 'connected' : 'disconnected' },
                   { name: 'Brevo', icon: '📬', status: emailConfig.brevoApiKey ? 'connected' : 'disconnected' },
-                  { name: 'Custom SMTP', icon: '⚙️', status: emailConfig.smtp.host ? 'connected' : 'disconnected' },
+                  { name: 'Custom SMTP', icon: '⚙️', status: safeEmailConfig.smtp?.host ? 'connected' : 'disconnected' },
                 ].map((integration) => (
                   <div key={integration.name} className="p-4 bg-slate-50 rounded-xl">
                     <div className="flex items-center justify-between mb-2">
@@ -14635,10 +14687,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">SMTP Host</label>
                         <input 
                           type="text" 
-                          value={emailConfig.smtp.host}
+                          value={safeEmailConfig.smtp?.host || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            smtp: { ...prev.smtp, host: e.target.value }
+                            smtp: { ...(prev.smtp || { host: '', port: 587, username: '', password: '', encryption: 'tls' as const }), host: e.target.value }
                           }))}
                           placeholder="smtp.example.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14648,10 +14700,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Port</label>
                         <input 
                           type="number" 
-                          value={emailConfig.smtp.port}
+                          value={safeEmailConfig.smtp?.port || 587}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            smtp: { ...prev.smtp, port: parseInt(e.target.value) }
+                            smtp: { ...(prev.smtp || { host: '', port: 587, username: '', password: '', encryption: 'tls' as const }), port: parseInt(e.target.value) }
                           }))}
                           placeholder="587"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14661,10 +14713,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Username</label>
                         <input 
                           type="text" 
-                          value={emailConfig.smtp.username}
+                          value={safeEmailConfig.smtp?.username || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            smtp: { ...prev.smtp, username: e.target.value }
+                            smtp: { ...(prev.smtp || { host: '', port: 587, username: '', password: '', encryption: 'tls' as const }), username: e.target.value }
                           }))}
                           placeholder="your@email.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14674,10 +14726,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Password</label>
                         <input 
                           type="password" 
-                          value={emailConfig.smtp.password}
+                          value={safeEmailConfig.smtp?.password || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            smtp: { ...prev.smtp, password: e.target.value }
+                            smtp: { ...(prev.smtp || { host: '', port: 587, username: '', password: '', encryption: 'tls' as const }), password: e.target.value }
                           }))}
                           placeholder="••••••••"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14686,10 +14738,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Encryption</label>
                         <select 
-                          value={emailConfig.smtp.encryption}
+                          value={safeEmailConfig.smtp?.encryption || 'tls'}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            smtp: { ...prev.smtp, encryption: e.target.value as any }
+                            smtp: { ...(prev.smtp || { host: '', port: 587, username: '', password: '', encryption: 'tls' as const }), encryption: e.target.value as any }
                           }))}
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         >
@@ -14701,7 +14753,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                     </div>
                   </div>
                   
-                  {/* POP Settings */}
+                  {/* IMAP Settings */}
                   <div className="border-t pt-6">
                     <h4 className="text-sm font-bold text-slate-700 mb-4">IMAP Settings (Incoming Email)</h4>
                     <div className="grid grid-cols-2 gap-4">
@@ -14709,10 +14761,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Host</label>
                         <input 
                           type="text" 
-                          value={emailConfig.imap.host}
+                          value={safeEmailConfig.imap?.host || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...prev.imap, host: e.target.value }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), host: e.target.value }
                           }))}
                           placeholder="imap.example.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14722,10 +14774,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Port</label>
                         <input 
                           type="number" 
-                          value={emailConfig.imap.port}
+                          value={safeEmailConfig.imap?.port || 993}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...prev.imap, port: parseInt(e.target.value) }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), port: parseInt(e.target.value) }
                           }))}
                           placeholder="993"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14735,10 +14787,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Username</label>
                         <input 
                           type="text" 
-                          value={emailConfig.imap.username}
+                          value={safeEmailConfig.imap?.username || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...prev.imap, username: e.target.value }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), username: e.target.value }
                           }))}
                           placeholder="your@email.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14748,10 +14800,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Password</label>
                         <input 
                           type="password" 
-                          value={emailConfig.imap.password}
+                          value={safeEmailConfig.imap?.password || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...prev.imap, password: e.target.value }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), password: e.target.value }
                           }))}
                           placeholder="••••••••"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
