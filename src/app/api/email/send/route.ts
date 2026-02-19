@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import nodemailer from 'nodemailer';
 
 // Email sending configuration interface
 interface EmailConfig {
@@ -55,7 +56,7 @@ function isValidSendGridKey(key: string | undefined): boolean {
 
 // Check if Brevo API key is valid
 function isValidBrevoKey(key: string | undefined): boolean {
-  return !!(key && key.length > 10);
+  return !!(key && key.length > 10 && !key.includes('demo'));
 }
 
 // Send via SendGrid API
@@ -68,11 +69,9 @@ async function sendViaSendGrid(payload: EmailPayload): Promise<{ success: boolea
   
   // Check if it's a real API key (starts with SG.)
   if (!isValidSendGridKey(sendgridApiKey)) {
-    // Simulate for demo keys
-    await new Promise(resolve => setTimeout(resolve, 300));
     return { 
-      success: true, 
-      messageId: `demo_sg_${generateEmailId()}`
+      success: false, 
+      error: 'Invalid SendGrid API key. Key must start with "SG." for production use.'
     };
   }
   
@@ -126,12 +125,10 @@ async function sendViaBrevo(payload: EmailPayload): Promise<{ success: boolean; 
   }
   
   // Check if it's a real API key
-  if (!isValidBrevoKey(brevoApiKey) || brevoApiKey.includes('demo')) {
-    // Simulate for demo keys
-    await new Promise(resolve => setTimeout(resolve, 300));
+  if (!isValidBrevoKey(brevoApiKey)) {
     return { 
-      success: true, 
-      messageId: `demo_brevo_${generateEmailId()}`
+      success: false, 
+      error: 'Invalid Brevo API key.'
     };
   }
   
@@ -169,53 +166,202 @@ async function sendViaBrevo(payload: EmailPayload): Promise<{ success: boolean; 
   }
 }
 
-// SMTP send (simulated - would need nodemailer in production)
+// Send via SMTP using nodemailer (REAL implementation)
 async function sendViaSMTP(payload: EmailPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const { smtp, fromEmail, fromName } = payload.config;
   
   if (!smtp?.host || !smtp?.username || !smtp?.password) {
-    return { success: false, error: 'SMTP configuration incomplete' };
+    return { success: false, error: 'SMTP configuration incomplete. Host, username, and password are required.' };
   }
   
-  // In a serverless environment, we can't use nodemailer directly
-  // This would need a dedicated email service or a server
-  // For now, simulate the send
-  await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-  
-  // Simulate 95% success rate for properly configured SMTP
-  if (Math.random() > 0.05) {
+  try {
+    // Configure the transporter based on encryption settings
+    const transportConfig: nodemailer.TransportOptions = {
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.encryption === 'ssl', // true for 465, false for other ports
+      auth: {
+        user: smtp.username,
+        pass: smtp.password
+      },
+      // TLS options
+      tls: smtp.encryption === 'tls' ? {
+        rejectUnauthorized: false // Allow self-signed certificates
+      } : undefined,
+      // Connection timeout
+      connectionTimeout: 10000,
+      socketTimeout: 10000
+    } as nodemailer.TransportOptions;
+    
+    // Create transporter
+    const transporter = nodemailer.createTransport(transportConfig);
+    
+    // Verify connection before sending
+    try {
+      await transporter.verify();
+      console.log('SMTP connection verified successfully');
+    } catch (verifyError: any) {
+      console.error('SMTP verification failed:', verifyError);
+      return { 
+        success: false, 
+        error: `SMTP connection failed: ${verifyError.message}. Check your SMTP settings.` 
+      };
+    }
+    
+    // Prepare email options
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `"${fromName || 'TrafficFlow'}" <${fromEmail}>`,
+      to: payload.to,
+      subject: payload.subject,
+      text: payload.body,
+      html: payload.body.replace(/\n/g, '<br>'),
+      ...(payload.cc ? { cc: payload.cc } : {}),
+      ...(payload.bcc ? { bcc: payload.bcc } : {}),
+    };
+    
+    // Send the email
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log('Email sent successfully:', info.messageId);
+    
     return { 
       success: true, 
-      messageId: generateEmailId()
+      messageId: info.messageId || generateEmailId()
+    };
+    
+  } catch (error: any) {
+    console.error('SMTP send error:', error);
+    
+    // Provide user-friendly error messages
+    let errorMessage = error.message;
+    
+    if (error.code === 'ECONNECTION') {
+      errorMessage = 'Could not connect to SMTP server. Check host and port.';
+    } else if (error.code === 'EAUTH') {
+      errorMessage = 'Authentication failed. Check your username and password.';
+    } else if (error.code === 'ETIMEDOUT') {
+      errorMessage = 'Connection timed out. Check if the SMTP server is accessible.';
+    } else if (error.code === 'ESOCKET') {
+      errorMessage = 'Socket error. Try changing encryption settings (SSL/TLS/None).';
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+}
+
+// Send via Gmail SMTP (using nodemailer)
+async function sendViaGmail(payload: EmailPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const { smtp, fromEmail, fromName } = payload.config;
+  
+  // Gmail requires app-specific password
+  if (!smtp?.username || !smtp?.password) {
+    return { 
+      success: false, 
+      error: 'Gmail requires your email and an app-specific password. Enable 2FA and generate an app password at https://myaccount.google.com/apppasswords' 
     };
   }
   
-  return { success: false, error: 'SMTP connection timeout' };
-}
-
-// Gmail API send (requires OAuth tokens in production)
-async function sendViaGmail(payload: EmailPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  // Gmail requires OAuth which is complex for serverless
-  // Recommend using SendGrid/Brevo instead
-  await new Promise(resolve => setTimeout(resolve, 400));
-  
-  return { 
-    success: true, 
-    messageId: `gmail_${generateEmailId()}`,
-    note: 'Gmail sending simulated - use SendGrid or Brevo for production'
+  // Use Gmail's SMTP server
+  const gmailConfig = {
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: smtp.username,
+      pass: smtp.password
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
   };
+  
+  try {
+    const transporter = nodemailer.createTransport(gmailConfig);
+    
+    // Verify connection
+    await transporter.verify();
+    
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `"${fromName || 'TrafficFlow'}" <${fromEmail}>`,
+      to: payload.to,
+      subject: payload.subject,
+      text: payload.body,
+      html: payload.body.replace(/\n/g, '<br>')
+    };
+    
+    const info = await transporter.sendMail(mailOptions);
+    
+    return { 
+      success: true, 
+      messageId: info.messageId 
+    };
+    
+  } catch (error: any) {
+    let errorMessage = error.message;
+    
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Gmail authentication failed. You need an app-specific password, not your regular password. Generate one at https://myaccount.google.com/apppasswords';
+    }
+    
+    return { success: false, error: errorMessage };
+  }
 }
 
-// Outlook/Microsoft Graph API send
+// Send via Outlook SMTP (using nodemailer)
 async function sendViaOutlook(payload: EmailPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  // Outlook requires OAuth which is complex for serverless
-  await new Promise(resolve => setTimeout(resolve, 400));
+  const { smtp, fromEmail, fromName } = payload.config;
   
-  return { 
-    success: true, 
-    messageId: `outlook_${generateEmailId()}`,
-    note: 'Outlook sending simulated - use SendGrid or Brevo for production'
+  if (!smtp?.username || !smtp?.password) {
+    return { 
+      success: false, 
+      error: 'Outlook requires your email and password (or app password if 2FA is enabled).' 
+    };
+  }
+  
+  // Use Outlook's SMTP server
+  const outlookConfig = {
+    host: 'smtp.office365.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: smtp.username,
+      pass: smtp.password
+    },
+    tls: {
+      ciphers: 'SSLv3',
+      rejectUnauthorized: false
+    }
   };
+  
+  try {
+    const transporter = nodemailer.createTransport(outlookConfig);
+    
+    await transporter.verify();
+    
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: `"${fromName || 'TrafficFlow'}" <${fromEmail}>`,
+      to: payload.to,
+      subject: payload.subject,
+      text: payload.body,
+      html: payload.body.replace(/\n/g, '<br>')
+    };
+    
+    const info = await transporter.sendMail(mailOptions);
+    
+    return { 
+      success: true, 
+      messageId: info.messageId 
+    };
+    
+  } catch (error: any) {
+    let errorMessage = error.message;
+    
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Outlook authentication failed. If you have 2FA enabled, use an app password.';
+    }
+    
+    return { success: false, error: errorMessage };
+  }
 }
 
 // Main email sending function
@@ -227,11 +373,9 @@ async function sendEmail(payload: EmailPayload): Promise<{ success: boolean; mes
   switch (provider) {
     case 'gmail':
       result = await sendViaGmail(payload);
-      demoMode = true; // Gmail is simulated
       break;
     case 'outlook':
       result = await sendViaOutlook(payload);
-      demoMode = true; // Outlook is simulated
       break;
     case 'sendgrid':
       result = await sendViaSendGrid(payload);
@@ -244,7 +388,6 @@ async function sendEmail(payload: EmailPayload): Promise<{ success: boolean; mes
     case 'custom':
     default:
       result = await sendViaSMTP(payload);
-      demoMode = true; // SMTP is simulated in serverless
       break;
   }
   
@@ -281,7 +424,7 @@ export async function POST(request: NextRequest) {
     }
     
     if (action === 'test') {
-      // Test email configuration
+      // Test email configuration by trying to connect
       if (!config) {
         return NextResponse.json({
           success: false,
@@ -289,23 +432,101 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
       
+      // For SMTP-based providers, verify the connection
+      if (['custom', 'gmail', 'outlook'].includes(config.provider)) {
+        const { smtp } = config;
+        
+        if (!smtp?.host || !smtp?.username || !smtp?.password) {
+          return NextResponse.json({
+            success: false,
+            error: 'SMTP configuration incomplete',
+            provider: config.provider,
+            missing: [
+              !smtp?.host ? 'SMTP Host' : null,
+              !smtp?.username ? 'Username' : null,
+              !smtp?.password ? 'Password' : null
+            ].filter(Boolean)
+          });
+        }
+        
+        // Determine host for Gmail/Outlook
+        let testHost = smtp.host;
+        let testPort = smtp.port;
+        
+        if (config.provider === 'gmail') {
+          testHost = 'smtp.gmail.com';
+          testPort = 587;
+        } else if (config.provider === 'outlook') {
+          testHost = 'smtp.office365.com';
+          testPort = 587;
+        }
+        
+        try {
+          const transporter = nodemailer.createTransport({
+            host: testHost,
+            port: testPort,
+            secure: config.provider === 'custom' ? smtp.encryption === 'ssl' : false,
+            auth: {
+              user: smtp.username,
+              pass: smtp.password
+            },
+            tls: {
+              rejectUnauthorized: false
+            }
+          });
+          
+          await transporter.verify();
+          
+          return NextResponse.json({
+            success: true,
+            message: 'SMTP connection successful! Email configuration is valid.',
+            provider: config.provider,
+            host: testHost,
+            port: testPort
+          });
+          
+        } catch (testError: any) {
+          return NextResponse.json({
+            success: false,
+            error: `Connection failed: ${testError.message}`,
+            provider: config.provider,
+            hint: config.provider === 'gmail' 
+              ? 'Make sure you\'re using an app-specific password, not your regular Gmail password.'
+              : config.provider === 'outlook'
+              ? 'If 2FA is enabled, use an app password.'
+              : 'Check your SMTP credentials and server settings.'
+          });
+        }
+      }
+      
+      // For API-based providers
       const providerStatus: Record<string, boolean> = {
-        gmail: config.provider === 'gmail',
-        outlook: config.provider === 'outlook',
         sendgrid: isValidSendGridKey(config.sendgridApiKey),
         brevo: isValidBrevoKey(config.brevoApiKey),
-        custom: !!(config.smtp?.host && config.smtp?.username)
       };
       
+      if (config.provider === 'sendgrid' || config.provider === 'brevo') {
+        if (!providerStatus[config.provider]) {
+          return NextResponse.json({
+            success: false,
+            error: `Invalid ${config.provider} API key`,
+            provider: config.provider,
+            hint: config.provider === 'sendgrid' 
+              ? 'SendGrid API key must start with "SG."'
+              : 'Get your API key from brevo.com'
+          });
+        }
+        
+        return NextResponse.json({
+          success: true,
+          message: `${config.provider} API key is valid.`,
+          provider: config.provider
+        });
+      }
+      
       return NextResponse.json({
-        success: true,
-        message: 'Email configuration validated',
-        provider: config.provider,
-        providerReady: providerStatus[config.provider] || false,
-        demoMode: !providerStatus[config.provider],
-        recommendations: config.provider === 'gmail' || config.provider === 'outlook' 
-          ? 'For production email sending, use SendGrid or Brevo API keys'
-          : undefined
+        success: false,
+        error: 'Unknown provider'
       });
     }
     
@@ -350,10 +571,7 @@ export async function POST(request: NextRequest) {
         provider: result.provider,
         timestamp: new Date().toISOString(),
         message: `Email sent successfully to ${to}`,
-        demoMode: result.demoMode,
-        note: result.demoMode 
-          ? 'Email was sent in demo/simulation mode. Configure real API keys for production.'
-          : undefined
+        demoMode: result.demoMode
       });
     } else {
       return NextResponse.json({
@@ -392,30 +610,36 @@ export async function GET(request: NextRequest) {
           name: 'SendGrid',
           configured: false,
           requires: ['sendgridApiKey'],
-          note: 'API key must start with "SG." for production use'
+          note: 'API key must start with "SG." for production use',
+          realEmails: true
         },
         brevo: {
           name: 'Brevo (Sendinblue)',
           configured: false,
-          requires: ['brevoApiKey']
+          requires: ['brevoApiKey'],
+          note: 'Get API key from brevo.com',
+          realEmails: true
         },
         gmail: {
           name: 'Gmail',
           configured: false,
-          requires: ['smtp configuration'],
-          note: 'Simulated in serverless - use SendGrid/Brevo for production'
+          requires: ['smtp.username (email)', 'smtp.password (app password)'],
+          note: 'Use app-specific password from myaccount.google.com/apppasswords',
+          realEmails: true
         },
         outlook: {
           name: 'Outlook',
           configured: false,
-          requires: ['smtp configuration'],
-          note: 'Simulated in serverless - use SendGrid/Brevo for production'
+          requires: ['smtp.username (email)', 'smtp.password'],
+          note: 'Use app password if 2FA is enabled',
+          realEmails: true
         },
         custom: {
           name: 'Custom SMTP',
           configured: false,
-          requires: ['smtp.host', 'smtp.username', 'smtp.password'],
-          note: 'Simulated in serverless - use SendGrid/Brevo for production'
+          requires: ['smtp.host', 'smtp.port', 'smtp.username', 'smtp.password'],
+          note: 'Any SMTP server (SendGrid SMTP, Mailgun, Amazon SES, etc.)',
+          realEmails: true
         }
       }
     });
@@ -423,11 +647,11 @@ export async function GET(request: NextRequest) {
   
   return NextResponse.json({
     message: "TrafficFlow Email Engine API - Active",
-    version: "2.1",
+    version: "3.0",
     features: {
       providers: ['gmail', 'outlook', 'sendgrid', 'brevo', 'custom'],
       capabilities: ['send', 'test', 'logs'],
-      realProviders: ['sendgrid', 'brevo']
+      realProviders: ['all providers now send real emails']
     },
     endpoints: {
       'POST /api/email/send': 'Send an email',
@@ -437,7 +661,10 @@ export async function GET(request: NextRequest) {
     },
     setup: {
       sendgrid: 'Get API key from sendgrid.com (starts with SG.)',
-      brevo: 'Get API key from brevo.com'
+      brevo: 'Get API key from brevo.com',
+      gmail: 'Enable 2FA, then generate app password at myaccount.google.com/apppasswords',
+      outlook: 'Use email and password (app password if 2FA enabled)',
+      custom: 'Configure your SMTP server settings'
     }
   });
 }

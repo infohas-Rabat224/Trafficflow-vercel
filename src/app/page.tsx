@@ -14530,6 +14530,41 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                 Cancel
               </button>
               <button 
+                onClick={async () => {
+                  // Test the email configuration
+                  try {
+                    const response = await fetch('/api/email/send', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'test',
+                        config: {
+                          provider: emailConfig.provider,
+                          smtp: emailConfig.smtp,
+                          sendgridApiKey: emailConfig.sendgridApiKey,
+                          brevoApiKey: emailConfig.brevoApiKey,
+                          fromEmail: emailConfig.fromEmail,
+                          fromName: emailConfig.fromName
+                        }
+                      })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                      addToast?.('✅ Email connection test successful!', 'success');
+                    } else {
+                      addToast?.(`❌ Connection failed: ${result.error || 'Unknown error'}`, 'error');
+                    }
+                  } catch (error) {
+                    addToast?.('❌ Failed to test email connection', 'error');
+                  }
+                }}
+                className="flex-1 py-3 border border-emerald-200 text-emerald-600 rounded-xl font-bold hover:bg-emerald-50 transition-colors"
+              >
+                Test Connection
+              </button>
+              <button 
                 onClick={() => {
                   setShowEmailConfig(false);
                   addToast?.('Email settings saved successfully!', 'success');
