@@ -13699,10 +13699,78 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   <Mail size={40} className="text-white/90" />
                   <div>
                     <h2 className="text-3xl font-black">Email Center</h2>
-                    <p className="text-white/80 text-sm">Full email client with SMTP/POP configuration</p>
+                    <p className="text-white/80 text-sm">Full email client with SMTP/IMAP configuration</p>
+                    <div className="flex items-center gap-4 mt-2">
+                      {safeEmailConfig.imap?.host && (
+                        <span className="flex items-center gap-1.5 text-xs bg-white/20 px-2 py-1 rounded-full">
+                          <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+                          IMAP: {safeEmailConfig.imap.host}
+                        </span>
+                      )}
+                      {safeEmailConfig.smtp?.host && (
+                        <span className="flex items-center gap-1.5 text-xs bg-white/20 px-2 py-1 rounded-full">
+                          <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
+                          SMTP: {safeEmailConfig.smtp.host}
+                        </span>
+                      )}
+                      {!safeEmailConfig.imap?.host && !safeEmailConfig.smtp?.host && (
+                        <span className="flex items-center gap-1.5 text-xs bg-amber-400/30 px-2 py-1 rounded-full">
+                          <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
+                          Not configured
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-3">
+                  {safeEmailConfig.imap?.host && (
+                    <button 
+                      onClick={async () => {
+                        if (emailFetching) return;
+                        setEmailFetching(true);
+                        addToast?.('Fetching emails from IMAP server...', 'info');
+                        try {
+                          const response = await fetch('/api/email/inbox', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'fetch',
+                              config: safeEmailConfig,
+                              folder: 'INBOX'
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success && result.emails) {
+                            setEmailFolders(prev => ({
+                              ...prev,
+                              inbox: result.emails.map((e: any) => ({
+                                id: e.id,
+                                from: e.from,
+                                fromEmail: e.fromEmail,
+                                subject: e.subject,
+                                body: e.body || '',
+                                date: e.date,
+                                read: e.read,
+                                starred: e.starred
+                              }))
+                            }));
+                            addToast?.(`✅ Fetched ${result.emails.length} emails`, 'success');
+                          } else {
+                            addToast?.(`❌ ${result.error || 'Failed to fetch'}`, 'error');
+                          }
+                        } catch (e) {
+                          addToast?.('❌ Connection failed', 'error');
+                        } finally {
+                          setEmailFetching(false);
+                        }
+                      }}
+                      disabled={emailFetching}
+                      className="px-4 py-2 bg-white/20 text-white rounded-lg text-sm font-bold hover:bg-white/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} className={emailFetching ? 'animate-spin' : ''} />
+                      {emailFetching ? 'Fetching...' : 'Fetch Emails'}
+                    </button>
+                  )}
                   <button 
                     onClick={() => setShowEmailConfig(true)}
                     className="px-4 py-2 bg-white/20 text-white rounded-lg text-sm font-bold hover:bg-white/30 transition-colors flex items-center gap-2"
@@ -13771,15 +13839,17 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
               {/* Email List */}
               <div className="bg-white p-4 rounded-3xl border shadow-sm lg:col-span-1">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-slate-700 capitalize">{activeEmailFolder}</h3>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">
+                    <h3 className="text-sm font-bold text-slate-700 capitalize">{activeEmailFolder}</h3>
+                    <span className="px-2 py-0.5 bg-slate-100 rounded-full text-[10px] text-slate-500">
                       {activeEmailFolder === 'inbox' && emailFolders.inbox.length}
                       {activeEmailFolder === 'sent' && emailFolders.sent.length}
                       {activeEmailFolder === 'drafts' && emailFolders.drafts.length}
                       {activeEmailFolder === 'spam' && emailFolders.spam.length}
                       {activeEmailFolder === 'trash' && emailFolders.trash.length}
                     </span>
+                  </div>
+                  <div className="flex items-center gap-2">
                     {activeEmailFolder === 'inbox' && (
                       <button
                         onClick={async () => {
@@ -13787,7 +13857,8 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                             addToast?.('Configure IMAP settings first', 'error');
                             return;
                           }
-                          addToast?.('Fetching emails...', 'info');
+                          setEmailFetching(true);
+                          addToast?.('Fetching emails from IMAP server...', 'info');
                           try {
                             const response = await fetch('/api/email/inbox', {
                               method: 'POST',
@@ -13813,18 +13884,21 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                                   starred: e.starred
                                 }))
                               }));
-                              addToast?.(`Fetched ${result.emails.length} emails`, 'success');
+                              addToast?.(`✅ Fetched ${result.emails.length} emails from server`, 'success');
                             } else {
-                              addToast?.(result.error || 'Failed to fetch emails', 'error');
+                              addToast?.(`❌ ${result.error || 'Failed to fetch emails'}`, 'error');
                             }
                           } catch (e) {
-                            addToast?.('Failed to fetch emails', 'error');
+                            addToast?.('❌ Failed to connect to IMAP server', 'error');
+                          } finally {
+                            setEmailFetching(false);
                           }
                         }}
-                        className="p-1 hover:bg-slate-100 rounded"
-                        title="Fetch Emails"
+                        disabled={emailFetching}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-50 text-cyan-600 rounded-lg text-xs font-bold hover:bg-cyan-100 transition-colors disabled:opacity-50"
                       >
-                        <RefreshCw size={14} className="text-slate-400" />
+                        <RefreshCw size={14} className={emailFetching ? 'animate-spin' : ''} />
+                        {emailFetching ? 'Fetching...' : 'Refresh'}
                       </button>
                     )}
                     {(activeEmailFolder === 'spam' || activeEmailFolder === 'trash') && (
@@ -13850,8 +13924,15 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   {activeEmailFolder === 'inbox' && emailFolders.inbox.length === 0 && (
                     <div className="text-center py-8">
                       <Inbox size={32} className="mx-auto mb-3 text-slate-300" />
-                      <p className="text-slate-400 text-xs">No emails</p>
-                      <p className="text-slate-300 text-[10px] mt-1">Configure IMAP to fetch emails</p>
+                      <p className="text-slate-400 text-sm font-medium">No emails in inbox</p>
+                      {safeEmailConfig.imap?.host ? (
+                        <>
+                          <p className="text-slate-300 text-xs mt-1">Click "Refresh" to fetch emails from your IMAP server</p>
+                          <p className="text-cyan-500 text-xs mt-2">IMAP: {safeEmailConfig.imap.host}:{safeEmailConfig.imap.port}</p>
+                        </>
+                      ) : (
+                        <p className="text-amber-500 text-xs mt-2">Configure IMAP settings to receive emails</p>
+                      )}
                     </div>
                   )}
                   {activeEmailFolder === 'inbox' && emailFolders.inbox.map((email) => (
