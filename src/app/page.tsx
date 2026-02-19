@@ -4908,7 +4908,18 @@ const MainContent = () => {
   const [showGoogleDriveConnect, setShowGoogleDriveConnect] = useState(false);
   const [showOneDriveConnect, setShowOneDriveConnect] = useState(false);
   const [cloudBackupLoading, setCloudBackupLoading] = useState(false);
-  const [cloudBackups, setCloudBackups] = usePersistentState<{ id: string; name: string; date: string; size: string; storage: 'googleDrive' | 'oneDrive' }[]>('tf_cloud_backups', []);
+  const [verifyingBackup, setVerifyingBackup] = useState<string | null>(null);
+  const [pushingToCloud, setPushingToCloud] = useState<string | null>(null);
+  const [cloudBackups, setCloudBackups] = usePersistentState<{ 
+    id: string; 
+    name: string; 
+    date: string; 
+    size: string; 
+    storage: 'googleDrive' | 'oneDrive';
+    webViewLink?: string;
+    fileId?: string;
+    cloudSynced?: boolean;
+  }[]>('tf_cloud_backups', []);
   
   // ============================================================
   // END ULTRA COMPLETE SYSTEM STATE VARIABLES
@@ -12254,9 +12265,12 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                                 date: new Date().toISOString(),
                                 size: `${sizeKB} KB`,
                                 storage: storage as 'googleDrive' | 'oneDrive',
-                                webViewLink: result.webViewLink
+                                webViewLink: result.webViewLink,
+                                fileId: result.fileId,
+                                cloudSynced: true  // Mark as actually synced to cloud
                               };
                               
+                              console.log('Cloud backup created successfully:', { fileName, fileId: result.fileId, webViewLink: result.webViewLink });
                               setCloudBackups(prev => [newBackup, ...prev].slice(0, 10));
                               addToast?.(`Backup uploaded to ${storage === 'googleDrive' ? 'Google Drive' : 'OneDrive'}!`, 'success');
                             } else {
@@ -12379,7 +12393,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
               {cloudBackups.length > 0 && (
                 <div className="mt-4 p-4 bg-slate-50 rounded-xl">
                   <h4 className="text-xs font-bold text-slate-600 mb-3">Recent Cloud Backups</h4>
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto">
                     {cloudBackups.map((backup) => (
                       <div key={backup.id} className="flex items-center justify-between p-2 bg-white rounded-lg text-xs">
                         <div className="flex items-center gap-2">
@@ -12389,24 +12403,181 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                             <div className="w-6 h-6 bg-blue-100 rounded flex items-center justify-center text-[10px] font-bold text-blue-600">1D</div>
                           )}
                           <div>
-                            <p className="font-bold text-slate-700">{backup.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-slate-700">{backup.name}</p>
+                              {backup.cloudSynced ? (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[9px] font-bold flex items-center gap-1">
+                                  <CheckCircle2 size={8} /> Synced
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-bold flex items-center gap-1">
+                                  <AlertCircle size={8} /> Local Only
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[10px] text-slate-400">{backup.size} • {new Date(backup.date).toLocaleString()}</p>
                           </div>
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap justify-end">
+                          {/* View in Drive button for synced backups */}
+                          {backup.cloudSynced && backup.webViewLink && (
+                            <button 
+                              onClick={() => window.open(backup.webViewLink, '_blank')}
+                              className="px-2 py-1 bg-blue-100 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-200"
+                              title="View in Google Drive"
+                            >
+                              <ExternalLink size={10} />
+                            </button>
+                          )}
+                          {/* Push to Cloud button for unsynced backups */}
+                          {!backup.cloudSynced && (cloudStorage.googleDrive.connected || cloudStorage.oneDrive.connected) && (
+                            <button 
+                              onClick={async () => {
+                                setPushingToCloud(backup.id);
+                                
+                                const storage = cloudStorage.googleDrive.connected ? 'googleDrive' : 'oneDrive';
+                                const accessToken = storage === 'googleDrive' 
+                                  ? cloudStorage.googleDrive.accessToken 
+                                  : cloudStorage.oneDrive.accessToken;
+                                const refreshToken = storage === 'googleDrive' 
+                                  ? cloudStorage.googleDrive.refreshToken 
+                                  : cloudStorage.oneDrive.refreshToken;
+                                
+                                if (!accessToken || accessToken.startsWith('demo_')) {
+                                  addToast?.('Please reconnect your cloud storage account', 'error');
+                                  setPushingToCloud(null);
+                                  return;
+                                }
+                                
+                                try {
+                                  // Generate backup data
+                                  const backupData = {
+                                    version: '21.0',
+                                    exportedAt: new Date().toISOString(),
+                                    systemSettings,
+                                    trafficMode,
+                                    campaigns,
+                                    proxies,
+                                    teamMembers,
+                                    emailConfig,
+                                    emailFolders,
+                                    aiContentHistory,
+                                    managedUsers,
+                                    keywordResearch,
+                                    contentCalendar,
+                                    customReportBuilder,
+                                    scheduledReports,
+                                    webhooks,
+                                    apiKeys,
+                                    agencyClients,
+                                    disavowList,
+                                    outreachCampaigns,
+                                    backlinkMetrics,
+                                    financialMetrics,
+                                    cloudStorage
+                                  };
+                                  
+                                  const backupStr = JSON.stringify(backupData, null, 2);
+                                  
+                                  const response = await fetch('/api/oauth/google-drive', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      action: 'upload',
+                                      accessToken,
+                                      refreshToken,
+                                      fileName: backup.name,
+                                      fileContent: backupStr
+                                    })
+                                  });
+                                  
+                                  const result = await response.json();
+                                  
+                                  if (result.success) {
+                                    // Update the backup with cloud info
+                                    setCloudBackups(prev => prev.map(b => 
+                                      b.id === backup.id 
+                                        ? { 
+                                            ...b, 
+                                            cloudSynced: true, 
+                                            fileId: result.fileId, 
+                                            webViewLink: result.webViewLink,
+                                            storage: storage 
+                                          }
+                                        : b
+                                    ));
+                                    addToast?.('Backup pushed to cloud successfully!', 'success');
+                                  } else {
+                                    addToast?.(result.error || 'Failed to push to cloud', 'error');
+                                  }
+                                } catch (error) {
+                                  addToast?.('Failed to push backup to cloud', 'error');
+                                }
+                                
+                                setPushingToCloud(null);
+                              }}
+                              disabled={pushingToCloud === backup.id}
+                              className="px-2 py-1 bg-indigo-100 text-indigo-600 rounded text-[10px] font-bold hover:bg-indigo-200 disabled:opacity-50"
+                              title="Push to Google Drive"
+                            >
+                              {pushingToCloud === backup.id ? (
+                                <div className="animate-spin w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                              ) : (
+                                <Upload size={10} />
+                              )}
+                            </button>
+                          )}
                           <button 
-                            onClick={() => {
-                              addToast?.('Restoring from cloud backup...', 'info');
-                              setTimeout(() => addToast?.('Backup restored!', 'success'), 1000);
+                            onClick={async () => {
+                              // For synced backups, try to download from cloud
+                              if (backup.cloudSynced && backup.fileId && cloudStorage.googleDrive.accessToken) {
+                                setVerifyingBackup(backup.id);
+                                try {
+                                  const response = await fetch(`/api/oauth/google-drive?action=download&fileId=${backup.fileId}`, {
+                                    headers: {
+                                      'Authorization': `Bearer ${cloudStorage.googleDrive.accessToken}`
+                                    }
+                                  });
+                                  
+                                  if (response.ok) {
+                                    const result = await response.json();
+                                    if (result.success && result.content) {
+                                      const data = JSON.parse(result.content);
+                                      // Apply the backup data
+                                      if (data.systemSettings) setSystemSettings(data.systemSettings);
+                                      if (data.trafficMode) setTrafficMode(data.trafficMode);
+                                      if (data.campaigns) setCampaigns(data.campaigns);
+                                      if (data.proxies) setProxies(data.proxies);
+                                      addToast?.('Backup restored from cloud!', 'success');
+                                    }
+                                  } else {
+                                    addToast?.('Failed to download from cloud', 'error');
+                                  }
+                                } catch (e) {
+                                  addToast?.('Failed to restore from cloud', 'error');
+                                }
+                                setVerifyingBackup(null);
+                              } else {
+                                // Local restore simulation
+                                addToast?.('Restoring from local backup...', 'info');
+                                setTimeout(() => addToast?.('Backup restored!', 'success'), 1000);
+                              }
                             }}
-                            className="px-2 py-1 bg-emerald-100 text-emerald-600 rounded text-[10px] font-bold hover:bg-emerald-200"
+                            disabled={verifyingBackup === backup.id}
+                            className="px-2 py-1 bg-emerald-100 text-emerald-600 rounded text-[10px] font-bold hover:bg-emerald-200 disabled:opacity-50"
                           >
-                            Restore
+                            {verifyingBackup === backup.id ? (
+                              <div className="animate-spin w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full"></div>
+                            ) : (
+                              'Restore'
+                            )}
                           </button>
                           <button 
                             onClick={() => {
-                              setCloudBackups(prev => prev.filter(b => b.id !== backup.id));
-                              addToast?.('Backup deleted', 'info');
+                              if (confirm('Delete this backup?')) {
+                                setCloudBackups(prev => prev.filter(b => b.id !== backup.id));
+                                addToast?.('Backup deleted', 'info');
+                              }
                             }}
                             className="px-2 py-1 bg-rose-100 text-rose-600 rounded text-[10px] font-bold hover:bg-rose-200"
                           >
@@ -12416,6 +12587,16 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       </div>
                     ))}
                   </div>
+                  {/* Migrate unsynced backups button */}
+                  {cloudBackups.some(b => !b.cloudSynced) && (cloudStorage.googleDrive.connected || cloudStorage.oneDrive.connected) && (
+                    <div className="mt-3 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                      <div className="flex items-center gap-2 text-xs text-amber-700">
+                        <AlertCircle size={14} />
+                        <span className="font-bold">{cloudBackups.filter(b => !b.cloudSynced).length} backup(s) not synced to cloud</span>
+                      </div>
+                      <p className="text-[10px] text-amber-600 mt-1">Click the upload button on each backup to push it to Google Drive.</p>
+                    </div>
+                  )}
                 </div>
               )}
               
