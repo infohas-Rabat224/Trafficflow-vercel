@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
+import ZAI from 'z-ai-web-dev-sdk';
 
 /**
  * AI Content Generator API
@@ -11,6 +12,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { topic, type, tone } = body;
+
+    console.log('Content generation request:', { topic, type, tone });
 
     if (!topic) {
       return NextResponse.json({ 
@@ -92,34 +95,40 @@ Generate the content now:`;
 
     let content = '';
     let method = 'ai';
+    let aiError = null;
 
     try {
-      // Use z-ai-web-dev-sdk for real AI generation
-      const ZAI = (await import('z-ai-web-dev-sdk')).default;
+      console.log('Initializing ZAI SDK...');
       const zai = await ZAI.create();
+      console.log('ZAI SDK initialized successfully');
 
       const maxTokens = contentType === 'meta' ? 100 : contentType === 'social' ? 300 : 2000;
 
+      console.log('Calling AI completion...');
       const completion = await zai.chat.completions.create({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.8, // Higher temperature for more creative/unique content
+        temperature: 0.8,
         max_tokens: maxTokens
       });
 
+      console.log('AI completion received:', completion ? 'success' : 'failed');
+      
       content = completion.choices?.[0]?.message?.content || '';
+      console.log('Content length:', content.length);
       
       if (!content || content.length < 20) {
-        throw new Error('AI returned insufficient content');
+        throw new Error('AI returned insufficient content: ' + content.substring(0, 100));
       }
       
-    } catch (aiError: any) {
-      console.error('AI generation error:', aiError?.message || aiError);
+    } catch (err: any) {
+      aiError = err?.message || 'Unknown error';
+      console.error('AI generation error:', aiError);
       
-      // Enhanced fallback that creates unique content based on the topic
-      content = generateEnhancedFallback(topic, contentType, contentTone);
+      // Generate topic-specific fallback
+      content = generateTopicSpecificContent(topic, contentType, contentTone);
       method = 'template';
     }
     
@@ -130,7 +139,8 @@ Generate the content now:`;
       topic,
       generatedAt: new Date().toISOString(),
       method,
-      wordCount: content.split(/\s+/).length
+      wordCount: content.split(/\s+/).length,
+      ...(aiError ? { note: 'Used fallback due to: ' + aiError } : {})
     });
   } catch (error: any) {
     console.error('API Error:', error);
@@ -143,285 +153,381 @@ Generate the content now:`;
   }
 }
 
-// Enhanced fallback that generates more unique content based on topic
-function generateEnhancedFallback(topic: string, type: string, tone: string): string {
-  // Create topic-specific variations
-  const topicLower = topic.toLowerCase();
-  const topicWords = topic.split(' ');
-  const mainKeyword = topicWords[0];
+// Generate truly topic-specific content
+function generateTopicSpecificContent(topic: string, type: string, tone: string): string {
+  const mainKeyword = topic.split(' ')[0];
+  const topicHash = topic.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
   
-  // Generate unique angles based on topic keywords
-  const angles = [
-    `innovative approaches to ${topic}`,
-    `${topic} strategies that actually work`,
-    `the complete guide to mastering ${topic}`,
-    `how ${topic} is transforming businesses`,
-    `${topic}: proven tactics for success`
-  ];
+  // Topic-specific content based on common themes
+  const isTechTopic = /tech|software|app|digital|ai|code|data|web|cloud/i.test(topic);
+  const isBusinessTopic = /business|marketing|sales|revenue|growth|strategy/i.test(topic);
+  const isHealthTopic = /health|fitness|wellness|medical|diet|exercise/i.test(topic);
+  const isFinanceTopic = /money|finance|invest|crypto|stock|trading|budget/i.test(topic);
   
-  const selectedAngle = angles[Math.floor(Math.random() * angles.length)];
+  let specificContent = '';
   
-  const templates: Record<string, string> = {
-    blog: `# ${topic}: A Comprehensive Guide
+  if (type === 'blog') {
+    specificContent = generateBlogContent(topic, tone, { isTechTopic, isBusinessTopic, isHealthTopic, isFinanceTopic });
+  } else if (type === 'product') {
+    specificContent = generateProductContent(topic, tone, { isTechTopic, isBusinessTopic });
+  } else if (type === 'landing') {
+    specificContent = generateLandingContent(topic, tone);
+  } else if (type === 'meta') {
+    specificContent = `${topic}: Expert guide with proven strategies. Discover actionable tips and best practices for ${topic.toLowerCase()}. Start improving today!`;
+  } else if (type === 'social') {
+    specificContent = `🚀 ${topic} — The Ultimate Guide!
 
-${getToneOpen(tone, topic)}
+Ready to master ${topic}? Here's what you need to know:
 
-In this in-depth guide, we'll explore everything you need to know about ${topic} — from foundational concepts to advanced strategies that can transform your results.
+✅ Proven strategies that work
+✅ Step-by-step implementation  
+✅ Real, measurable results
 
-## Why ${topic} Matters Now More Than Ever
+Don't miss out! 👇
 
-The landscape of ${topic} has evolved dramatically. What worked just a few years ago may no longer deliver the same results. Understanding the current best practices and emerging trends in ${topic} is essential for anyone looking to stay competitive.
+#${mainKeyword.replace(/[^a-zA-Z0-9]/g, '')} #Tips #Success #Growth`;
+  }
+  
+  return specificContent;
+}
 
-### Current State of ${topic}
+function generateBlogContent(topic: string, tone: string, context: any): string {
+  const { isTechTopic, isBusinessTopic, isHealthTopic, isFinanceTopic } = context;
+  
+  let intro = '';
+  let sections = '';
+  
+  // Generate topic-specific intro
+  if (isTechTopic) {
+    intro = `The technology landscape is evolving rapidly, and ${topic} has emerged as a game-changer for organizations worldwide. Whether you're a developer, product manager, or tech leader, understanding ${topic} is crucial for staying ahead of the curve.`;
+    sections = `
+## The Technical Foundation of ${topic}
 
-Recent studies show that organizations implementing effective ${topic} strategies see an average improvement of 35-50% in their key performance metrics. The gap between leaders and laggards in this space continues to widen.
+At its core, ${topic} leverages cutting-edge technologies to solve complex problems. The architecture typically involves:
 
-## Key Components of Successful ${topic}
+- **Scalable Infrastructure**: Cloud-native design patterns that adapt to demand
+- **Modern APIs**: RESTful or GraphQL interfaces for seamless integration
+- **Data Pipeline**: Real-time processing and analytics capabilities
 
-### 1. Foundation and Strategy
+## Implementation Architecture
 
-Before diving into ${topic} tactics, you need a solid foundation. This means:
+When implementing ${topic}, consider these technical requirements:
 
-- **Clear Objectives**: Define what success looks like for your ${topic} efforts
-- **Audience Understanding**: Know who you're targeting and what they need
-- **Resource Allocation**: Ensure you have the right tools and team in place
+\`\`\`
+Key Components:
+├── Core Engine
+├── Data Layer
+├── API Gateway
+└── Client Interface
+\`\`\`
 
-### 2. Implementation Best Practices
+### Best Practices for Developers
 
-When implementing your ${topic} strategy, focus on these critical elements:
+1. **Start with a clear architecture diagram** before writing any code
+2. **Use version control** from day one
+3. **Implement proper error handling** and logging
+4. **Write comprehensive tests** for all components
 
-${getBestPractices(topic)}
+## Common Technical Challenges
 
-### 3. Measurement and Optimization
+| Challenge | Solution |
+|-----------|----------|
+| Scalability | Implement horizontal scaling patterns |
+| Security | Use encryption and authentication layers |
+| Performance | Optimize database queries and caching |
+| Integration | Design flexible API contracts |`;
+  } else if (isBusinessTopic) {
+    intro = `In the competitive business landscape, ${topic} has become a critical differentiator between market leaders and followers. Companies that master ${topic} consistently outperform their competitors and achieve sustainable growth.`;
+    sections = `
+## Why ${topic} Drives Business Success
 
-Track these essential metrics for ${topic}:
+Research shows that businesses implementing effective ${topic} strategies see:
 
-- Engagement rates and quality signals
-- Conversion metrics tied to your goals
-- Long-term value indicators
-- Competitive benchmarking
+- 47% higher revenue growth
+- 32% improvement in customer retention
+- 28% reduction in operational costs
+- 3x faster time-to-market
 
-## Common ${topic} Mistakes to Avoid
+## Strategic Framework for ${topic}
 
-${getMistakes(topic, tone)}
+### Phase 1: Assessment
+Evaluate your current ${topic} maturity level and identify gaps.
 
-## Advanced ${topic} Techniques
+### Phase 2: Planning
+Develop a roadmap with clear milestones and KPIs.
 
-For those ready to take their ${topic} efforts further:
+### Phase 3: Execution
+Implement with dedicated resources and executive sponsorship.
 
-1. **Data-Driven Decision Making**: Use analytics to guide every decision
-2. **Continuous Testing**: Always be experimenting with new approaches
-3. **Integration**: Connect ${topic} with your broader strategy
-4. **Automation**: Leverage tools to scale your efforts efficiently
+### Phase 4: Optimization
+Continuously refine based on performance data.
 
-## Getting Started with ${topic}
+## ROI Calculation
 
-Ready to improve your ${topic} approach? Here's your action plan:
+To measure ${topic} success, track these metrics:
 
-1. Audit your current ${topic} efforts
-2. Identify your biggest opportunities
-3. Create a prioritized roadmap
-4. Implement with focus and consistency
-5. Measure, learn, and iterate
+1. **Cost Savings**: Calculate efficiency gains
+2. **Revenue Impact**: Measure attributable growth
+3. **Time Savings**: Quantify productivity improvements
+4. **Quality Metrics**: Track error rates and satisfaction`;
+  } else if (isHealthTopic) {
+    intro = `When it comes to ${topic}, evidence-based approaches make all the difference. Understanding the science and practical applications can transform your health outcomes and overall wellbeing.`;
+    sections = `
+## The Science Behind ${topic}
 
-## Conclusion
+Research published in leading journals demonstrates that ${topic}:
 
-${topic} represents a significant opportunity for those willing to invest the time and effort to do it right. By following the strategies outlined in this guide and staying committed to continuous improvement, you'll be well-positioned to achieve lasting success.
+- Improves key health markers by 25-40%
+- Reduces risk factors associated with chronic conditions
+- Enhances overall quality of life metrics
+
+## Practical Implementation
+
+### Getting Started with ${topic}
+
+1. **Consult a Professional**: Always start with expert guidance
+2. **Set Realistic Goals**: Progressive improvement over quick fixes
+3. **Track Your Progress**: Use measurable indicators
+
+### Daily Protocol
+
+Morning: Establish baseline routines
+Afternoon: Maintain consistency
+Evening: Track and reflect
+
+## Common Questions About ${topic}
+
+**Q: How long until I see results?**
+A: Most people notice changes within 2-4 weeks of consistent practice.
+
+**Q: Are there any risks?**
+A: When done correctly, ${topic} is generally safe. Consult your healthcare provider.
+
+**Q: What equipment do I need?**
+A: Start with basics and add tools as you advance.`;
+  } else if (isFinanceTopic) {
+    intro = `Financial success with ${topic} requires understanding both the fundamentals and advanced strategies. Whether you're a beginner or experienced, this guide will help you make informed decisions about ${topic}.`;
+    sections = `
+## Understanding ${topic} Fundamentals
+
+Before diving into ${topic}, grasp these core concepts:
+
+- **Risk vs. Reward**: Higher potential returns come with increased risk
+- **Time Horizon**: Your strategy should match your timeline
+- **Diversification**: Never put all eggs in one basket
+
+## ${topic} Strategy Framework
+
+### Conservative Approach
+Lower risk, steady returns over time
+
+### Moderate Approach
+Balanced risk-reward for medium-term goals
+
+### Aggressive Approach
+Higher risk tolerance for maximum growth potential
+
+## Key Metrics to Track
+
+| Metric | Target | Your Current |
+|--------|--------|--------------|
+| Return Rate | 8-12% | ___% |
+| Risk Score | <5 | ___ |
+| Allocation | Balanced | ___ |
+
+## Warning Signs to Avoid
+
+🚩 Promises of guaranteed returns
+🚩 Pressure to act immediately
+🚩 Lack of transparency in fees
+🚩 No clear exit strategy`;
+  } else {
+    intro = `${topic} has become an essential topic for anyone looking to improve their knowledge and achieve better results. This comprehensive guide will walk you through everything you need to know.`;
+    sections = `
+## Understanding ${topic}
+
+The fundamentals of ${topic} include:
+
+- Core principles and concepts
+- Practical applications
+- Common challenges and solutions
+
+## How to Get Started with ${topic}
+
+### Step 1: Learn the Basics
+Build a strong foundation in ${topic} fundamentals.
+
+### Step 2: Practice Consistently
+Regular application leads to mastery.
+
+### Step 3: Seek Feedback
+Learn from experts and peers.
+
+### Step 4: Iterate and Improve
+Continuous improvement is key.
+
+## Tips for Success
+
+✅ Start small and build up
+✅ Document your progress
+✅ Connect with others in the field
+✅ Stay updated on developments`;
+  }
+  
+  // Tone-specific closings
+  const closings: Record<string, string> = {
+    professional: `## Conclusion
+
+${topic} represents a significant opportunity for those willing to invest the time to master it. By following the strategies outlined in this guide and maintaining consistency, you'll be well-positioned to achieve your goals.
+
+The key takeaway? Start with a solid foundation, implement systematically, and continuously optimize based on results.`,
+    casual: `## Wrapping Up
+
+So there you have it — everything you need to know about ${topic}! The key is to just get started and keep going. Don't overthink it.
+
+Got questions? Drop them in the comments below! 👇`,
+    technical: `## Technical Summary
+
+Key implementation points for ${topic}:
+
+1. Architecture must support scalability
+2. Security considerations from day one
+3. Performance monitoring essential
+4. Documentation and testing non-negotiable
+
+For advanced implementations, consider consulting domain experts.`,
+    friendly: `## Final Thoughts
+
+I hope this guide to ${topic} has been helpful! Remember, everyone starts somewhere, and you're already on the right path by learning.
+
+Feel free to reach out if you have any questions — I'm here to help! 😊`
+  };
+  
+  return `# ${topic}: The Complete Guide
+
+${intro}
+${sections}
+
+${closings[tone] || closings.professional}
+
+---
+*Generated for: ${topic}*`;
+}
+
+function generateProductContent(topic: string, tone: string, context: any): string {
+  const { isTechTopic, isBusinessTopic } = context;
+  
+  return `# ${topic}
+
+## Transform Your Results with ${topic}
+
+${tone === 'casual' ? "Looking for a solution that actually works?" : "Our premium offering delivers exceptional value for professionals seeking results."}
+
+### What Makes ${topic} Different
+
+✅ **Proven Methodology** — Tested across 500+ implementations  
+✅ **Expert Support** — Guidance when you need it  
+✅ **Measurable Results** — Track your progress  
+✅ **Regular Updates** — Stay current with improvements
+
+### Features
+
+- Complete ${topic} framework
+- Step-by-step implementation guide
+- Templates and resources
+- Progress tracking dashboard
+
+### What's Included
+
+📦 ${topic} Core System  
+📦 Implementation Templates  
+📦 Training Materials  
+📦 Priority Support Access
+
+### Pricing
+
+| Plan | Features | Price |
+|------|----------|-------|
+| Starter | Basic ${topic} tools | $49/mo |
+| Professional | Full suite + support | $99/mo |
+| Enterprise | Custom + dedicated | Contact us |
+
+### Customer Results
+
+> "Implemented ${topic} in 2 weeks and saw 40% improvement." — Early Adopter
+
+**[Start Free Trial] [Schedule Demo] [Contact Sales]**`;
+}
+
+function generateLandingContent(topic: string, tone: string): string {
+  return `# Master ${topic} Today
+
+${tone === 'casual' ? "Ready to finally get results with" : "The complete solution for professionals seeking excellence in"} ${topic}.
 
 ---
 
-*This article provides a comprehensive overview of ${topic}. For personalized guidance, consider consulting with experts in this field.*`,
+## The Problem
 
-    product: `# ${topic}
+❌ Information overload  
+❌ No clear path forward  
+❌ Wasted time and money  
+❌ Frustrating trial and error
 
-${getToneOpen(tone, topic)}
+---
 
-## Overview
+## The Solution
 
-${topic} delivers exceptional value for organizations and individuals seeking proven results. Our approach combines cutting-edge methodology with practical implementation to ensure you achieve your goals.
+### ✅ Proven ${topic} Framework
+A step-by-step system that works.
 
-## Key Features
+### ✅ Expert Implementation
+Learn from practitioners who've mastered ${topic}.
 
-${getProductFeatures(topic)}
+### ✅ Real, Measurable Results
+Join thousands achieving their ${topic} goals.
 
-## Benefits You'll Experience
-
-- **Measurable Results**: Track your progress with clear metrics
-- **Time Efficiency**: Achieve more in less time with optimized processes  
-- **Scalability**: Solutions that grow with your needs
-- **Expert Support**: Access to guidance when you need it
-
-## Why Choose This ${topic} Solution?
-
-Unlike generic alternatives, our ${topic} approach is:
-
-- **Proven**: Tested across multiple scenarios and use cases
-- **Customizable**: Adapted to your specific requirements
-- **Sustainable**: Built for long-term success
-- **Supported**: Backed by expertise and resources
-
-## What Others Are Saying
-
-${getTestimonials(topic, tone)}
-
-## Get Started Today
-
-Transform your approach to ${topic}. Contact us to learn how we can help you achieve your goals faster and more effectively.
-
-**Ready to take the next step? Let's connect.**`,
-
-    landing: `# Transform Your Results with ${topic}
-
-${getToneOpen(tone, topic)}
-
-## The ${topic} Advantage
-
-Stop struggling with outdated approaches. Our ${topic} solution delivers the results you've been looking for.
-
-### What We Deliver
-
-✅ **Strategic Clarity** — Know exactly what to do and why  
-✅ **Proven Framework** — Follow a path that works  
-✅ **Expert Guidance** — Support when you need it  
-✅ **Measurable Impact** — See real results
+---
 
 ## How It Works
 
-### Step 1: Discovery
-We analyze your current ${topic} situation and identify opportunities for improvement.
+| Step | Action | Result |
+|------|--------|--------|
+| 1 | Assess | Know your starting point |
+| 2 | Plan | Get your custom roadmap |
+| 3 | Implement | Execute with guidance |
+| 4 | Optimize | Refine for best results |
 
-### Step 2: Strategy  
-We create a customized ${topic} plan tailored to your specific goals and resources.
+---
 
-### Step 3: Implementation
-We guide you through execution with clear instructions and support.
+## What You Get
 
-### Step 4: Results
-You see measurable improvements in your ${topic} outcomes.
+✓ Complete ${topic} system  
+✓ Templates and checklists  
+✓ Expert community access  
+✓ Lifetime updates
 
-## Why Choose Us
+---
 
-| Feature | What You Get |
-|---------|--------------|
-| Experience | 10+ years in ${topic} |
-| Results | 500+ successful implementations |
-| Support | 24/7 access to experts |
-| Guarantee | Your satisfaction matters |
+## Pricing
 
-## What Our Clients Say
+**$97** — One-time payment  
+*30-day money-back guarantee*
 
-${getTestimonials(topic, tone)}
+---
 
-## Ready to Improve Your ${topic} Results?
+## Ready to Transform Your ${topic}?
 
-Join hundreds of organizations who have transformed their approach to ${topic} with our help.
+**[Get Instant Access]**
 
-**[Get Started Now] [Schedule a Call] [Learn More]**`,
-
-    meta: `${topic} - Expert guide with proven strategies and actionable tips. Discover how to improve your results with our comprehensive approach. Start today.`,
-
-    social: `🚀 ${topic} - The Complete Guide!
-
-Want to master ${topic}? Here's what you need to know:
-
-✅ Proven strategies that work
-✅ Step-by-step implementation
-✅ Real results you can measure
-✅ Expert tips and insights
-
-Ready to level up your ${topic} game?
-
-👇 Link in bio to learn more!
-
-#${mainKeyword.replace(/[^a-zA-Z0-9]/g, '')} #Strategy #Growth #Tips #Success`
-  };
-
-  return templates[type] || templates.blog;
-}
-
-function getToneOpen(tone: string, topic: string): string {
-  const opens: Record<string, string[]> = {
-    professional: [
-      `In the evolving landscape of ${topic}, understanding the core principles has become essential for success.`,
-      `Organizations worldwide are recognizing the strategic importance of ${topic} in achieving their objectives.`,
-      `As ${topic} continues to gain prominence, professionals are seeking comprehensive guidance on best practices.`
-    ],
-    casual: [
-      `Let's talk about ${topic} — because honestly, it's more important than most people realize.`,
-      `So you want to understand ${topic}? Great choice. Let me break it down for you.`,
-      `Here's the thing about ${topic}: once you get it, everything changes for the better.`
-    ],
-    technical: [
-      `The technical implementation of ${topic} requires a systematic approach across multiple domains.`,
-      `From an architectural perspective, ${topic} encompasses several interconnected components that demand careful consideration.`,
-      `Analyzing ${topic} through a technical lens reveals patterns and methodologies critical for optimal outcomes.`
-    ],
-    friendly: [
-      `I'm excited to share everything I've learned about ${topic} with you!`,
-      `If you've been curious about ${topic}, you're in exactly the right place.`,
-      `Let's explore ${topic} together — I promise to make it clear and practical.`
-    ]
-  };
-  
-  const options = opens[tone] || opens.professional;
-  return options[Math.floor(Math.random() * options.length)];
-}
-
-function getBestPractices(topic: string): string {
-  const practices = [
-    `- Start with clear goals and metrics for ${topic} success`,
-    `- Document your processes for consistent ${topic} execution`,
-    `- Review and update your ${topic} strategy quarterly`,
-    `- Invest in training for anyone involved in ${topic}`,
-    `- Use data to inform all ${topic} decisions`
-  ];
-  
-  return practices.slice(0, 4).join('\n');
-}
-
-function getMistakes(topic: string, tone: string): string {
-  if (tone === 'casual') {
-    return `Watch out for these common ${topic} pitfalls:
-    
-- Trying to do too much at once (start small!)
-- Ignoring the data because you "know better"
-- Copying what others do without understanding why
-- Giving up too early before seeing results`;
-  }
-  
-  return `Even experienced practitioners make these ${topic} errors:
-
-1. **Lack of Clear Strategy**: Jumping into tactics without defined objectives
-2. **Inconsistent Execution**: Failing to maintain momentum and consistency
-3. **Ignoring Analytics**: Making decisions based on assumptions rather than data
-4. **Short-term Thinking**: Focusing on quick wins at the expense of sustainable growth`;
-}
-
-function getProductFeatures(topic: string): string {
-  return `- **Comprehensive ${topic} Framework** — Everything you need in one place
-- **Step-by-Step Implementation** — Clear guidance at every stage
-- **Templates and Resources** — Save time with ready-to-use materials
-- **Progress Tracking** — Monitor your ${topic} improvements
-- **Expert Insights** — Learn from proven approaches`;
-}
-
-function getTestimonials(topic: string, tone: string): string {
-  if (tone === 'casual') {
-    return `"This ${topic} approach literally changed everything for us." — Happy Customer
-
-"I was skeptical at first, but the results speak for themselves." — Satisfied User`;
-  }
-  
-  return `"The ${topic} framework provided exactly what we needed to move forward with confidence." — Industry Leader
-
-"Implementing these ${topic} strategies resulted in measurable improvements within 30 days." — Business Owner`;
+*Join 2,000+ professionals who've mastered ${topic}*`;
 }
 
 export async function GET() {
   return NextResponse.json({ 
     message: "TrafficFlow AI Content Generator API",
-    version: "3.0",
+    version: "3.1",
     status: "active",
+    usingSDK: "z-ai-web-dev-sdk",
     endpoints: {
       POST: "/api/generate-content - Generate unique AI content"
     },
