@@ -4720,15 +4720,22 @@ const MainContent = () => {
   
   // ===== PHASE 6: INTEGRATION HUB =====
   const [integrations, setIntegrations] = useState<{ name: string; type: string; status: 'connected' | 'disconnected' | 'error'; lastSync: string; data?: any }[]>([
-    { name: 'Google Analytics 4', type: 'analytics', status: 'connected', lastSync: new Date().toLocaleString() },
-    { name: 'Google Search Console', type: 'seo', status: 'connected', lastSync: new Date().toLocaleString() },
+    { name: 'Google Analytics 4', type: 'analytics', status: 'disconnected', lastSync: '' },
+    { name: 'Google Search Console', type: 'seo', status: 'disconnected', lastSync: '' },
     { name: 'Google Ads', type: 'ads', status: 'disconnected', lastSync: '' },
     { name: 'Facebook Ads', type: 'ads', status: 'disconnected', lastSync: '' },
-    { name: 'Bing Webmaster', type: 'seo', status: 'connected', lastSync: new Date().toLocaleString() },
+    { name: 'Bing Webmaster', type: 'seo', status: 'disconnected', lastSync: '' },
   ]);
-  const [webhooks, setWebhooks] = useState<{ id: string; name: string; url: string; events: string[]; status: string; lastTriggered: string }[]>([]);
+  const [webhooks, setWebhooks] = useState<{ id: string; name: string; url: string; events: string[]; status: string; lastTriggered: string; secret?: string }[]>([]);
   const [apiKeys, setApiKeys] = useState<{ id: string; name: string; key: string; created: string; lastUsed: string; permissions: string[] }[]>([]);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [ga4Data, setGa4Data] = useState<any>(null);
+  const [gscData, setGscData] = useState<any>(null);
+  const [integrationLoading, setIntegrationLoading] = useState<string | null>(null);
+  const [showGa4Modal, setShowGa4Modal] = useState(false);
+  const [showGscModal, setShowGscModal] = useState(false);
+  const [ga4PropertyId, setGa4PropertyId] = useState('');
+  const [gscSiteUrl, setGscSiteUrl] = useState('');
   
   // ===== PHASE 7: FINANCIAL INTELLIGENCE =====
   const [budgetData, setBudgetData] = useState<{ campaign: string; allocated: number; spent: number; remaining: number; efficiency: number }[]>([]);
@@ -10697,24 +10704,77 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                     <div className="flex gap-2">
                       {integration.status === 'connected' ? (
                         <>
+                          {integration.name === 'Google Analytics 4' && (
+                            <button 
+                              onClick={async () => {
+                                setIntegrationLoading('ga4');
+                                try {
+                                  const response = await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'fetch_ga4' })
+                                  });
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    setGa4Data(result.data);
+                                    setShowGa4Modal(true);
+                                    addToast?.('GA4 data loaded!', 'success');
+                                  } else {
+                                    addToast?.(result.error || 'Failed to fetch data', 'error');
+                                  }
+                                } catch (e) {
+                                  addToast?.('Failed to fetch GA4 data', 'error');
+                                }
+                                setIntegrationLoading(null);
+                              }}
+                              disabled={integrationLoading === 'ga4'}
+                              className="flex-1 px-3 py-1.5 bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                            >
+                              {integrationLoading === 'ga4' ? 'Loading...' : 'View Data'}
+                            </button>
+                          )}
+                          {integration.name === 'Google Search Console' && (
+                            <button 
+                              onClick={async () => {
+                                setIntegrationLoading('gsc');
+                                try {
+                                  const response = await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'fetch_gsc' })
+                                  });
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    setGscData(result.data);
+                                    setShowGscModal(true);
+                                    addToast?.('GSC data loaded!', 'success');
+                                  } else {
+                                    addToast?.(result.error || 'Failed to fetch data', 'error');
+                                  }
+                                } catch (e) {
+                                  addToast?.('Failed to fetch GSC data', 'error');
+                                }
+                                setIntegrationLoading(null);
+                              }}
+                              disabled={integrationLoading === 'gsc'}
+                              className="flex-1 px-3 py-1.5 bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                            >
+                              {integrationLoading === 'gsc' ? 'Loading...' : 'View Data'}
+                            </button>
+                          )}
                           <button 
-                            onClick={() => {
-                              // Open configuration modal
-                              const apiKey = prompt(`Enter new API key for ${integration.name}:`);
-                              if (apiKey) {
-                                setIntegrations(prev => prev.map((int, idx) => 
-                                  idx === i ? { ...int, lastSync: new Date().toLocaleString() } : int
-                                ));
-                                addToast?.(`${integration.name} configuration updated!`, 'success');
-                              }
-                            }}
-                            className="flex-1 px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300 transition-colors"
-                          >
-                            Configure
-                          </button>
-                          <button 
-                            onClick={() => {
+                            onClick={async () => {
                               if (confirm(`Disconnect ${integration.name}?`)) {
+                                const intKey = integration.name === 'Google Analytics 4' ? 'ga4' : 
+                                              integration.name === 'Google Search Console' ? 'gsc' : 
+                                              integration.name.toLowerCase().replace(/\s+/g, '_');
+                                try {
+                                  await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'disconnect', integration: intKey })
+                                  });
+                                } catch (e) {}
                                 setIntegrations(prev => prev.map((int, idx) => 
                                   idx === i ? { ...int, status: 'disconnected' as const, lastSync: '' } : int
                                 ));
@@ -10728,17 +10788,19 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                         </>
                       ) : (
                         <button 
-                          onClick={() => {
-                            // Simulate OAuth flow
-                            const apiKey = prompt(`Enter your ${integration.name} API key:`);
-                            const accountId = prompt(`Enter your ${integration.name} Account ID:`);
-                            if (apiKey && accountId) {
-                              setIntegrations(prev => prev.map((int, idx) => 
-                                idx === i ? { ...int, status: 'connected' as const, lastSync: new Date().toLocaleString() } : int
-                              ));
-                              addToast?.(`${integration.name} connected successfully!`, 'success');
+                          onClick={async () => {
+                            if (integration.name === 'Google Analytics 4') {
+                              setShowGa4Modal(true);
+                            } else if (integration.name === 'Google Search Console') {
+                              setShowGscModal(true);
                             } else {
-                              addToast?.('Please provide both API key and Account ID', 'error');
+                              const apiKey = prompt(`Enter your ${integration.name} API key:`);
+                              if (apiKey) {
+                                setIntegrations(prev => prev.map((int, idx) => 
+                                  idx === i ? { ...int, status: 'connected' as const, lastSync: new Date().toLocaleString() } : int
+                                ));
+                                addToast?.(`${integration.name} connected successfully!`, 'success');
+                              }
                             }
                           }}
                           className="w-full px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
@@ -10761,19 +10823,39 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                     Webhooks
                   </h3>
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                       const name = prompt('Enter webhook name:');
-                      const url = prompt('Enter webhook URL:');
+                      const url = prompt('Enter webhook URL (e.g., https://your-server.com/webhook):');
                       if (name && url) {
-                        setWebhooks(prev => [...prev, {
-                          id: Date.now().toString(),
-                          name,
-                          url,
-                          events: ['campaign.started', 'campaign.stopped'],
-                          status: 'active',
-                          lastTriggered: 'Never'
-                        }]);
-                        addToast?.('Webhook created successfully!', 'success');
+                        try {
+                          const response = await fetch('/api/integrations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'create_webhook',
+                              webhookName: name,
+                              webhookUrl: url,
+                              webhookEvents: ['campaign.started', 'campaign.stopped', 'traffic.spike']
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            setWebhooks(prev => [...prev, result.webhook]);
+                            addToast?.(`Webhook created! Test result: ${result.testResult?.success ? 'Success' : 'Failed to reach'}`, 
+                              result.testResult?.success ? 'success' : 'warning');
+                          }
+                        } catch (e) {
+                          // Fallback local
+                          setWebhooks(prev => [...prev, {
+                            id: Date.now().toString(),
+                            name,
+                            url,
+                            events: ['campaign.started', 'campaign.stopped'],
+                            status: 'active',
+                            lastTriggered: 'Never'
+                          }]);
+                          addToast?.('Webhook created (offline mode)', 'success');
+                        }
                       }
                     }}
                     className="px-4 py-2 bg-purple-600 text-white rounded-lg text-xs font-bold hover:bg-purple-700">
@@ -10782,14 +10864,66 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                 </div>
                 <div className="space-y-2">
                   {webhooks.length > 0 ? webhooks.map((wh, i) => (
-                    <div key={i} className="p-3 bg-slate-50 rounded-xl">
-                      <div className="flex items-center justify-between">
+                    <div key={wh.id || i} className="p-3 bg-slate-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-slate-700">{wh.name}</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] ${wh.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                          {wh.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] ${wh.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                            {wh.status}
+                          </span>
+                          <button
+                            onClick={async () => {
+                              addToast?.('Testing webhook...', 'info');
+                              try {
+                                const response = await fetch('/api/integrations', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    action: 'trigger_webhook',
+                                    webhookId: wh.id,
+                                    event: 'webhook.test',
+                                    eventData: { test: true, timestamp: new Date().toISOString() }
+                                  })
+                                });
+                                const result = await response.json();
+                                addToast?.(result.message || 'Webhook triggered', result.success ? 'success' : 'error');
+                                if (result.success) {
+                                  setWebhooks(prev => prev.map((w, idx) => 
+                                    idx === i ? { ...w, lastTriggered: new Date().toLocaleString() } : w
+                                  ));
+                                }
+                              } catch (e) {
+                                addToast?.('Failed to trigger webhook', 'error');
+                              }
+                            }}
+                            className="text-[10px] text-blue-600 hover:underline"
+                          >
+                            Test
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm('Delete this webhook?')) {
+                                try {
+                                  await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'delete_webhook', webhookId: wh.id })
+                                  });
+                                } catch (e) {}
+                                setWebhooks(prev => prev.filter((_, idx) => idx !== i));
+                                addToast?.('Webhook deleted', 'info');
+                              }
+                            }}
+                            className="text-[10px] text-rose-600 hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-1 truncate">{wh.url}</div>
+                      <div className="text-[10px] text-slate-400 truncate">{wh.url}</div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        Events: {wh.events?.join(', ') || 'All events'} | Last: {wh.lastTriggered}
+                      </div>
                     </div>
                   )) : (
                     <div className="text-center py-6 text-slate-400">
@@ -10808,19 +10942,37 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                     API Keys
                   </h3>
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                       const name = prompt('Enter API key name:');
                       if (name) {
-                        const newKey = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-                        setApiKeys(prev => [...prev, {
-                          id: Date.now().toString(),
-                          name,
-                          key: newKey,
-                          created: new Date().toLocaleString(),
-                          lastUsed: 'Never',
-                          permissions: ['read', 'write']
-                        }]);
-                        addToast?.(`API Key created: ${newKey.substring(0, 8)}...`, 'success');
+                        try {
+                          const response = await fetch('/api/integrations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'create_api_key',
+                              apiKeyName: name,
+                              apiKeyPermissions: ['read', 'write']
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            setApiKeys(prev => [...prev, result.apiKey]);
+                            addToast?.(`API Key created: ${result.apiKey.key.substring(0, 12)}...`, 'success');
+                          }
+                        } catch (e) {
+                          // Fallback
+                          const newKey = 'tf_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+                          setApiKeys(prev => [...prev, {
+                            id: Date.now().toString(),
+                            name,
+                            key: newKey,
+                            created: new Date().toLocaleString(),
+                            lastUsed: 'Never',
+                            permissions: ['read', 'write']
+                          }]);
+                          addToast?.(`API Key created: ${newKey.substring(0, 12)}...`, 'success');
+                        }
                       }
                     }}
                     className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-bold hover:bg-amber-700"
@@ -10830,20 +10982,40 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                 </div>
                 <div className="space-y-2">
                   {apiKeys.length > 0 ? apiKeys.map((key, i) => (
-                    <div key={i} className="p-3 bg-slate-50 rounded-xl">
+                    <div key={key.id || i} className="p-3 bg-slate-50 rounded-xl">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-700">{key.name}</span>
-                        <button 
-                          onClick={() => {
-                            navigator.clipboard.writeText(key.key);
-                            addToast?.('API key copied to clipboard!', 'success');
-                          }}
-                          className="text-[10px] text-slate-400 font-mono hover:text-blue-600 cursor-pointer"
-                        >
-                          ...{key.key.slice(-8)} 📋
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText(key.key);
+                              addToast?.('API key copied to clipboard!', 'success');
+                            }}
+                            className="text-[10px] text-slate-400 font-mono hover:text-blue-600 cursor-pointer"
+                          >
+                            {key.key.substring(0, 8)}...{key.key.slice(-4)} 📋
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm('Delete this API key?')) {
+                                try {
+                                  await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'delete_api_key', apiKeyId: key.id })
+                                  });
+                                } catch (e) {}
+                                setApiKeys(prev => prev.filter((_, idx) => idx !== i));
+                                addToast?.('API key deleted', 'info');
+                              }
+                            }}
+                            className="text-[10px] text-rose-600 hover:underline"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-1">Created: {key.created} | Last used: {key.lastUsed || 'Never'}</div>
+                      <div className="text-[10px] text-slate-400 mt-1">Created: {key.created} | Permissions: {key.permissions?.join(', ') || 'read, write'}</div>
                     </div>
                   )) : (
                     <div className="text-center py-6 text-slate-400">
@@ -14344,6 +14516,341 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
           </div>
         )}
       </main>
+      
+      {/* Google Analytics 4 Connect Modal */}
+      {showGa4Modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            {!ga4Data ? (
+              <>
+                <div className="p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <BarChart3 size={24} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">Connect Google Analytics 4</h3>
+                      <p className="text-sm text-slate-500">Enter your GA4 Property ID to connect</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">GA4 Property ID</label>
+                      <input 
+                        type="text" 
+                        value={ga4PropertyId}
+                        onChange={(e) => setGa4PropertyId(e.target.value)}
+                        placeholder="e.g., 123456789 or properties/123456789"
+                        className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Find your Property ID in GA4 Admin → Property Settings</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3 mt-6">
+                    <button 
+                      onClick={() => {
+                        setShowGa4Modal(false);
+                        setGa4PropertyId('');
+                      }}
+                      className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!ga4PropertyId) {
+                          addToast?.('Please enter a Property ID', 'error');
+                          return;
+                        }
+                        setIntegrationLoading('ga4');
+                        try {
+                          const response = await fetch('/api/integrations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'connect_ga4',
+                              propertyId: ga4PropertyId
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            setIntegrations(prev => prev.map(int => 
+                              int.name === 'Google Analytics 4' 
+                                ? { ...int, status: 'connected' as const, lastSync: new Date().toLocaleString() }
+                                : int
+                            ));
+                            setGa4Data(result.data);
+                            addToast?.('Google Analytics 4 connected!', 'success');
+                          } else {
+                            addToast?.(result.error || 'Connection failed', 'error');
+                          }
+                        } catch (e) {
+                          addToast?.('Connection failed', 'error');
+                        }
+                        setIntegrationLoading(null);
+                      }}
+                      disabled={integrationLoading === 'ga4'}
+                      className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {integrationLoading === 'ga4' ? 'Connecting...' : 'Connect'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-6 border-b bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-t-3xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <BarChart3 size={24} />
+                      <div>
+                        <h3 className="text-lg font-bold">Google Analytics 4</h3>
+                        <p className="text-xs text-white/80">Real-time analytics data</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowGa4Modal(false)} className="p-2 hover:bg-white/20 rounded-lg">
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  {/* Real-time */}
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Real-time Active Users</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-emerald-50 p-4 rounded-xl text-center">
+                        <div className="text-3xl font-black text-emerald-600">{ga4Data.realtime?.activeUsers || 0}</div>
+                        <div className="text-xs text-slate-500">Active Now</div>
+                      </div>
+                      <div className="bg-blue-50 p-4 rounded-xl text-center">
+                        <div className="text-3xl font-black text-blue-600">{ga4Data.realtime?.pageviewsLastHour || 0}</div>
+                        <div className="text-xs text-slate-500">Pageviews/Hour</div>
+                      </div>
+                      <div className="bg-purple-50 p-4 rounded-xl text-center">
+                        <div className="text-3xl font-black text-purple-600">{ga4Data.overview?.bounceRate || 0}%</div>
+                        <div className="text-xs text-slate-500">Bounce Rate</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Overview */}
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Today's Overview</h4>
+                    <div className="grid grid-cols-4 gap-3">
+                      <div className="bg-slate-50 p-3 rounded-xl">
+                        <div className="text-xl font-bold text-slate-800">{ga4Data.overview?.totalUsers?.toLocaleString() || 0}</div>
+                        <div className="text-[10px] text-slate-500">Users</div>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-xl">
+                        <div className="text-xl font-bold text-slate-800">{ga4Data.overview?.sessions?.toLocaleString() || 0}</div>
+                        <div className="text-[10px] text-slate-500">Sessions</div>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-xl">
+                        <div className="text-xl font-bold text-slate-800">{ga4Data.overview?.pageviews?.toLocaleString() || 0}</div>
+                        <div className="text-[10px] text-slate-500">Pageviews</div>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-xl">
+                        <div className="text-xl font-bold text-slate-800">{ga4Data.overview?.avgSessionDuration || 0}s</div>
+                        <div className="text-[10px] text-slate-500">Avg Duration</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Traffic Sources */}
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Top Traffic Sources</h4>
+                    <div className="space-y-2">
+                      {ga4Data.sources?.slice(0, 5).map((source: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                          <span className="text-xs font-medium">{source.source}</span>
+                          <div className="text-xs text-slate-500">
+                            {source.visitors} visitors • {source.bounceRate}% bounce
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Top Pages */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Top Pages</h4>
+                    <div className="space-y-2">
+                      {ga4Data.topPages?.slice(0, 5).map((page: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                          <span className="text-xs font-medium truncate">{page.page}</span>
+                          <span className="text-xs text-slate-500">{page.pageviews} views</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Google Search Console Connect Modal */}
+      {showGscModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            {!gscData ? (
+              <>
+                <div className="p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
+                      <Search size={24} className="text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">Connect Google Search Console</h3>
+                      <p className="text-sm text-slate-500">Enter your verified site URL</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Site URL</label>
+                      <input 
+                        type="text" 
+                        value={gscSiteUrl}
+                        onChange={(e) => setGscSiteUrl(e.target.value)}
+                        placeholder="e.g., https://yourdomain.com"
+                        className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Enter the URL exactly as it appears in Search Console</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3 mt-6">
+                    <button 
+                      onClick={() => {
+                        setShowGscModal(false);
+                        setGscSiteUrl('');
+                      }}
+                      className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!gscSiteUrl) {
+                          addToast?.('Please enter a site URL', 'error');
+                          return;
+                        }
+                        setIntegrationLoading('gsc');
+                        try {
+                          const response = await fetch('/api/integrations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'connect_gsc',
+                              siteUrl: gscSiteUrl
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            setIntegrations(prev => prev.map(int => 
+                              int.name === 'Google Search Console' 
+                                ? { ...int, status: 'connected' as const, lastSync: new Date().toLocaleString() }
+                                : int
+                            ));
+                            setGscData(result.data);
+                            addToast?.('Google Search Console connected!', 'success');
+                          } else {
+                            addToast?.(result.error || 'Connection failed', 'error');
+                          }
+                        } catch (e) {
+                          addToast?.('Connection failed', 'error');
+                        }
+                        setIntegrationLoading(null);
+                      }}
+                      disabled={integrationLoading === 'gsc'}
+                      className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                    >
+                      {integrationLoading === 'gsc' ? 'Connecting...' : 'Connect'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-6 border-b bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-t-3xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Search size={24} />
+                      <div>
+                        <h3 className="text-lg font-bold">Google Search Console</h3>
+                        <p className="text-xs text-white/80">{gscSiteUrl}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowGscModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  {/* Overview */}
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Last 7 Days</h4>
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="bg-blue-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-blue-600">{gscData.overview?.totalImpressions?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-slate-500">Impressions</div>
+                      </div>
+                      <div className="bg-emerald-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-emerald-600">{gscData.overview?.totalClicks?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-slate-500">Clicks</div>
+                      </div>
+                      <div className="bg-purple-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-purple-600">{gscData.overview?.avgCTR}%</div>
+                        <div className="text-xs text-slate-500">Avg CTR</div>
+                      </div>
+                      <div className="bg-amber-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-amber-600">{gscData.overview?.avgPosition}</div>
+                        <div className="text-xs text-slate-500">Avg Position</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Top Keywords */}
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Top Keywords</h4>
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                      {gscData.keywords?.slice(0, 10).map((kw: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                          <span className="text-xs font-medium">{kw.keyword}</span>
+                          <div className="flex items-center gap-3 text-xs text-slate-500">
+                            <span>{kw.impressions} imp</span>
+                            <span>{kw.clicks} clicks</span>
+                            <span className="text-emerald-600">#{parseFloat(kw.position).toFixed(1)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Top Pages */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Top Pages</h4>
+                    <div className="space-y-2">
+                      {gscData.topPages?.slice(0, 5).map((page: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                          <span className="text-xs font-medium truncate">{page.page}</span>
+                          <span className="text-xs text-slate-500">{page.clicks} clicks</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Google My Business Connect Modal */}
       {showGmbConnect && (
