@@ -355,22 +355,19 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
   let debugLog: string[] = [];
   
   try {
-    debugLog.push(`Starting POP3 connection to ${config.host}:${config.port}`);
+    debugLog.push(`Starting POP3 connection to ${config.host}:${config.port} (SSL: ${config.tls})`);
     
-    // POP3 implementation using net socket
-    const net = await import('net');
-    
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       const timeout = setTimeout(() => {
         debugLog.push('Connection timeout after 20 seconds');
         resolve({ 
           success: false, 
-          error: 'Connection timeout - POP3 server did not respond within 20 seconds.',
+          error: 'Connection timeout - POP3 server did not respond within 20 seconds. Check host, port, and SSL setting.',
           debug: debugLog.join('\n')
         });
       }, 20000);
       
-      const socket = new net.Socket();
+      let socket: any;
       let emails: Email[] = [];
       let currentStep = 'connect';
       let emailList: { num: number; size: number }[] = [];
@@ -382,7 +379,7 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
         socket.write(cmd + '\r\n');
       };
       
-      socket.on('data', (data: Buffer) => {
+      const handleData = (data: Buffer) => {
         const response = data.toString();
         debugLog.push(`RECV: ${response.substring(0, 200)}...`);
         
@@ -393,7 +390,7 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
             sendCommand(`USER ${config.username}`);
           } else {
             clearTimeout(timeout);
-            resolve({ success: false, error: 'Server greeting failed', debug: debugLog.join('\n') });
+            resolve({ success: false, error: 'Server greeting failed - server may not be a POP3 server', debug: debugLog.join('\n') });
           }
         } else if (currentStep === 'user') {
           if (response.startsWith('+OK')) {
@@ -401,7 +398,7 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
             sendCommand(`PASS ${config.password}`);
           } else {
             clearTimeout(timeout);
-            resolve({ success: false, error: 'Username rejected', debug: debugLog.join('\n') });
+            resolve({ success: false, error: 'Username rejected by server', debug: debugLog.join('\n') });
           }
         } else if (currentStep === 'pass') {
           if (response.startsWith('+OK')) {
@@ -412,7 +409,7 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
             resolve({ success: false, error: 'Authentication failed. Check username and password.', debug: debugLog.join('\n') });
           }
         } else if (currentStep === 'list') {
-          if (response.includes('.')) {
+          if (response.includes('\r\n.\r\n') || response.endsWith('\r\n.\r\n')) {
             // Parse email list
             const lines = response.split('\r\n');
             lines.forEach(line => {
@@ -435,13 +432,15 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
             const toFetch = emailList.slice(-10);
             currentStep = 'retr';
             currentEmail = { id: generateEmailId(), read: true, starred: false, body: '' };
+            emailBuffer = '';
             sendCommand(`RETR ${toFetch[0].num}`);
+          } else {
+            emailBuffer += response;
           }
         } else if (currentStep === 'retr') {
-          if (response.includes('\r\n.\r\n') || response.endsWith('\r\n.\r\n')) {
+          emailBuffer += response;
+          if (emailBuffer.includes('\r\n.\r\n')) {
             // Email complete
-            emailBuffer += response;
-            
             // Parse email
             const headerMatch = emailBuffer.match(/^(.*?)\r\n\r\n/s);
             if (headerMatch) {
@@ -496,30 +495,55 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
               clearTimeout(timeout);
               resolve({ success: true, emails, debug: debugLog.join('\n') });
             }
-          } else {
-            emailBuffer += response;
           }
         }
-      });
+      };
       
-      socket.on('error', (err: Error) => {
+      const handleError = (err: Error) => {
         debugLog.push(`Socket error: ${err.message}`);
         clearTimeout(timeout);
-        resolve({ success: false, error: `Connection error: ${err.message}`, debug: debugLog.join('\n') });
-      });
+        
+        let errorMsg = err.message;
+        if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
+          errorMsg = `Cannot connect to ${config.host}:${config.port}. Check server address, port, and firewall.`;
+        } else if (errorMsg.includes('EPROTO') || errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
+          errorMsg = `SSL/TLS error. If using port 110, try unchecking SSL. If using port 995, make sure SSL is checked.`;
+        }
+        
+        resolve({ success: false, error: errorMsg, debug: debugLog.join('\n') });
+      };
       
-      socket.on('close', () => {
+      const handleClose = () => {
         debugLog.push('Connection closed');
         clearTimeout(timeout);
-      });
+      };
       
-      socket.connect({
-        host: config.host,
-        port: config.port
-      });
+      // Use TLS for SSL connections, regular net socket for non-SSL
+      if (config.tls) {
+        debugLog.push('Using TLS connection (SSL)');
+        const tls = await import('tls');
+        socket = tls.connect({
+          host: config.host,
+          port: config.port,
+          rejectUnauthorized: false
+        }, () => {
+          debugLog.push('TLS connection established');
+        });
+      } else {
+        debugLog.push('Using plain TCP connection (non-SSL)');
+        const net = await import('net');
+        socket = new net.Socket();
+        socket.connect({
+          host: config.host,
+          port: config.port
+        });
+      }
+      
+      socket.on('data', handleData);
+      socket.on('error', handleError);
+      socket.on('close', handleClose);
     });
   } catch (error: any) {
-    debugLog.push(`Exception: ${error.message}`);
     return { success: false, error: error.message, debug: debugLog.join('\n') };
   }
 }
@@ -602,21 +626,19 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
 // Test POP3 connection
 async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
-    const net = await import('net');
-    
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       const timeout = setTimeout(() => {
         resolve({ 
           success: false, 
-          error: 'Connection timeout - POP3 server did not respond within 15 seconds' 
+          error: 'Connection timeout - POP3 server did not respond within 15 seconds. Check host, port, and SSL setting.' 
         });
       }, 15000);
       
-      const socket = new net.Socket();
+      let socket: any;
       let resolved = false;
       let step = 'connect';
       
-      socket.on('data', (data: Buffer) => {
+      const handleData = (data: Buffer) => {
         const response = data.toString();
         
         if (step === 'connect' && response.startsWith('+OK')) {
@@ -642,20 +664,41 @@ async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: b
             resolve({ success: false, error: 'Authentication failed. Check username and password.' });
           }
         }
-      });
+      };
       
-      socket.on('error', (err: Error) => {
+      const handleError = (err: Error) => {
         clearTimeout(timeout);
         if (!resolved) {
           resolved = true;
-          resolve({ success: false, error: `Connection error: ${err.message}` });
+          let errorMsg = err.message;
+          if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
+            errorMsg = `Cannot connect to ${config.host}:${config.port}. Check server address and port.`;
+          } else if (errorMsg.includes('EPROTO') || errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
+            errorMsg = `SSL/TLS error. If using port 110, uncheck SSL. If using port 995, make sure SSL is checked.`;
+          }
+          resolve({ success: false, error: errorMsg });
         }
-      });
+      };
       
-      socket.connect({
-        host: config.host,
-        port: config.port
-      });
+      // Use TLS for SSL connections, regular net socket for non-SSL
+      if (config.tls) {
+        const tls = await import('tls');
+        socket = tls.connect({
+          host: config.host,
+          port: config.port,
+          rejectUnauthorized: false
+        });
+      } else {
+        const net = await import('net');
+        socket = new net.Socket();
+        socket.connect({
+          host: config.host,
+          port: config.port
+        });
+      }
+      
+      socket.on('data', handleData);
+      socket.on('error', handleError);
     });
   } catch (error: any) {
     return { success: false, error: error.message };

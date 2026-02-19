@@ -14912,7 +14912,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                       />
                       <label htmlFor="imap-ssl" className="text-xs text-slate-600">
-                        Use SSL (Port 993). Uncheck for non-SSL (Port 143)
+                        Use SSL/TLS encryption for secure connection
                       </label>
                     </div>
                   </div>
@@ -14987,7 +14987,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                       />
                       <label htmlFor="pop-ssl" className="text-xs text-slate-600">
-                        Use SSL (Port 995). Uncheck for non-SSL (Port 110)
+                        Use SSL/TLS encryption for secure connection
                       </label>
                     </div>
                   </div>
