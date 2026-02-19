@@ -4813,6 +4813,7 @@ const MainContent = () => {
   
   const [activeEmailFolder, setActiveEmailFolder] = useState<'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'>('inbox');
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [showEmailViewModal, setShowEmailViewModal] = useState(false);
   const [showComposeEmail, setShowComposeEmail] = useState(false);
   const [composeEmail, setComposeEmail] = useState({ to: '', subject: '', body: '' });
   const [showEmailConfig, setShowEmailConfig] = useState(false);
@@ -14044,6 +14045,13 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <h3 className="text-lg font-bold text-slate-800">{selectedEmail.subject}</h3>
                         <div className="flex gap-2">
                           <button
+                            onClick={() => setShowEmailViewModal(true)}
+                            className="p-1 rounded text-slate-400 hover:text-cyan-600 hover:bg-cyan-50"
+                            title="Open in full view"
+                          >
+                            <Maximize2 size={16} />
+                          </button>
+                          <button
                             onClick={() => {
                               setEmailFolders(prev => ({
                                 ...prev,
@@ -14073,7 +14081,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       </div>
                     </div>
                     <div className="flex-1 overflow-y-auto min-h-[200px]">
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedEmail.body || 'No content'}</p>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{selectedEmail.body || 'No content'}</p>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
                       <button 
@@ -15299,6 +15307,137 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                 className="flex-1 py-3 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Send size={16} /> Send Email
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email View Modal */}
+      {showEmailViewModal && selectedEmail && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b bg-gradient-to-r from-cyan-600 to-blue-600 text-white">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 pr-4">
+                  <h3 className="text-xl font-bold mb-2">{selectedEmail.subject}</h3>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">
+                      {(selectedEmail.from || selectedEmail.to)?.charAt(0)?.toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{selectedEmail.from || `To: ${selectedEmail.to}`}</p>
+                      <p className="text-xs text-white/80">{selectedEmail.fromEmail || selectedEmail.toEmail}</p>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => setShowEmailViewModal(false)} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            
+            {/* Email Metadata */}
+            <div className="px-6 py-4 border-b bg-slate-50">
+              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
+                <div className="flex items-center gap-2">
+                  <Calendar size={14} className="text-slate-400" />
+                  <span>{new Date(selectedEmail.date).toLocaleString()}</span>
+                </div>
+                {selectedEmail.fromEmail && (
+                  <div className="flex items-center gap-2">
+                    <Mail size={14} className="text-slate-400" />
+                    <span>{selectedEmail.fromEmail}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => {
+                    setEmailFolders(prev => ({
+                      ...prev,
+                      [activeEmailFolder]: prev[activeEmailFolder as keyof typeof prev].map((e: any) => 
+                        e.id === selectedEmail.id ? { ...e, starred: !e.starred } : e
+                      )
+                    }));
+                    setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred });
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1 rounded ${selectedEmail.starred ? 'text-amber-500 bg-amber-50' : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'}`}
+                >
+                  <Star size={14} fill={selectedEmail.starred ? 'currentColor' : 'none'} />
+                  <span>{selectedEmail.starred ? 'Starred' : 'Star'}</span>
+                </button>
+              </div>
+            </div>
+            
+            {/* Email Body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="prose prose-sm max-w-none">
+                <p className="text-slate-700 whitespace-pre-wrap break-words leading-relaxed">{selectedEmail.body || 'No content'}</p>
+              </div>
+            </div>
+            
+            {/* Actions Footer */}
+            <div className="p-4 border-t bg-slate-50 flex flex-wrap gap-2">
+              <button 
+                onClick={() => {
+                  setComposeEmail({ 
+                    to: selectedEmail.fromEmail || '', 
+                    subject: `Re: ${selectedEmail.subject}`, 
+                    body: `\n\n--- Original Message ---\nFrom: ${selectedEmail.from}\nDate: ${selectedEmail.date}\n\n${selectedEmail.body}` 
+                  });
+                  setShowEmailViewModal(false);
+                  setShowComposeEmail(true);
+                }}
+                className="px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm font-bold hover:bg-cyan-700 transition-colors flex items-center gap-2"
+              >
+                <Reply size={16} /> Reply
+              </button>
+              <button 
+                onClick={() => {
+                  setComposeEmail({ 
+                    to: '', 
+                    subject: `Fwd: ${selectedEmail.subject}`, 
+                    body: `\n\n--- Forwarded Message ---\nFrom: ${selectedEmail.from}\nDate: ${selectedEmail.date}\n\n${selectedEmail.body}` 
+                  });
+                  setShowEmailViewModal(false);
+                  setShowComposeEmail(true);
+                }}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-bold hover:bg-slate-700 transition-colors flex items-center gap-2"
+              >
+                <Share2 size={16} /> Forward
+              </button>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(selectedEmail.body || '');
+                  addToast?.('Email content copied to clipboard', 'success');
+                }}
+                className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-bold hover:bg-slate-100 transition-colors flex items-center gap-2"
+              >
+                <Copy size={16} /> Copy
+              </button>
+              <div className="flex-1"></div>
+              <button 
+                onClick={() => {
+                  if (activeEmailFolder === 'trash') {
+                    setEmailFolders(prev => ({
+                      ...prev,
+                      trash: prev.trash.filter(e => e.id !== selectedEmail.id)
+                    }));
+                    addToast?.('Email permanently deleted', 'info');
+                  } else {
+                    setEmailFolders(prev => ({
+                      ...prev,
+                      trash: [...prev.trash, { ...selectedEmail, originalFolder: activeEmailFolder }],
+                      [activeEmailFolder]: prev[activeEmailFolder as keyof typeof prev].filter((e: any) => e.id !== selectedEmail.id)
+                    }));
+                    addToast?.('Email moved to trash', 'info');
+                  }
+                  setShowEmailViewModal(false);
+                  setSelectedEmail(null);
+                }}
+                className="px-4 py-2 border border-rose-200 text-rose-600 rounded-lg text-sm font-bold hover:bg-rose-50 transition-colors flex items-center gap-2"
+              >
+                <Trash2 size={16} /> Delete
               </button>
             </div>
           </div>

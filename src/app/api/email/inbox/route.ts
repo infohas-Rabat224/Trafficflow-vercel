@@ -99,7 +99,156 @@ function decodeMimeWord(str: string): string {
     } catch {
       return quoted;
     }
+  }).replace(/=\?ISO-8859-1\?Q\?([^?]+)\?=/gi, (_, quoted) => {
+    try {
+      return quoted.replace(/=([0-9A-F]{2})/gi, (_, hex) => 
+        String.fromCharCode(parseInt(hex, 16))
+      );
+    } catch {
+      return quoted;
+    }
   });
+}
+
+// Decode quoted-printable text
+function decodeQuotedPrintable(str: string): string {
+  if (!str) return '';
+  
+  // Remove soft line breaks
+  let decoded = str.replace(/=\r\n/g, '');
+  
+  // Decode quoted-printable characters
+  decoded = decoded.replace(/=([0-9A-F]{2})/gi, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  
+  return decoded;
+}
+
+// Decode base64 text
+function decodeBase64(str: string, charset: string = 'utf-8'): string {
+  if (!str) return '';
+  
+  try {
+    // Remove whitespace
+    const cleanStr = str.replace(/\s/g, '');
+    const buffer = Buffer.from(cleanStr, 'base64');
+    
+    if (charset.toLowerCase() === 'utf-8' || charset.toLowerCase() === 'utf8') {
+      return buffer.toString('utf-8');
+    } else if (charset.toLowerCase() === 'iso-8859-1' || charset.toLowerCase() === 'latin1') {
+      return buffer.toString('latin1');
+    }
+    
+    return buffer.toString('utf-8');
+  } catch (e) {
+    return str;
+  }
+}
+
+// Parse MIME email body and extract clean text content
+function parseMIMEBody(rawBody: string): string {
+  if (!rawBody) return '';
+  
+  let textContent = '';
+  let htmlContent = '';
+  
+  // Check if this is a multipart message
+  const boundaryMatch = rawBody.match(/Content-Type:\s*multipart\/[^;]+;\s*boundary="?([^"\r\n]+)"?/i);
+  
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1].trim();
+    console.log('Found multipart boundary:', boundary);
+    
+    // Split by boundary
+    const parts = rawBody.split(new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    
+    for (const part of parts) {
+      if (part.trim() === '--' || part.trim() === '') continue;
+      
+      // Extract content type and encoding for each part
+      const contentTypeMatch = part.match(/Content-Type:\s*([^;\r\n]+)/i);
+      const charsetMatch = part.match(/Content-Type:[^;]*;\s*charset=["']?([^"'\r\n]+)["']?/i);
+      const encodingMatch = part.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
+      
+      const contentType = contentTypeMatch ? contentTypeMatch[1].trim().toLowerCase() : '';
+      const charset = charsetMatch ? charsetMatch[1].trim() : 'utf-8';
+      const encoding = encodingMatch ? encodingMatch[1].trim().toLowerCase() : '7bit';
+      
+      // Find the body of this part (after double newline)
+      const bodyStart = part.indexOf('\r\n\r\n');
+      const partBody = bodyStart > 0 ? part.substring(bodyStart + 4) : part;
+      
+      let decodedPart = partBody;
+      
+      // Decode based on transfer encoding
+      if (encoding === 'base64') {
+        decodedPart = decodeBase64(partBody, charset);
+      } else if (encoding === 'quoted-printable') {
+        decodedPart = decodeQuotedPrintable(partBody);
+      }
+      
+      // Store text/plain content (preferred)
+      if (contentType.includes('text/plain') && !textContent) {
+        textContent = decodedPart;
+      } else if (contentType.includes('text/html') && !htmlContent) {
+        htmlContent = decodedPart;
+      }
+    }
+  } else {
+    // Single part message
+    const contentTypeMatch = rawBody.match(/Content-Type:\s*([^;\r\n]+)/i);
+    const charsetMatch = rawBody.match(/Content-Type:[^;]*;\s*charset=["']?([^"'\r\n]+)["']?/i);
+    const encodingMatch = rawBody.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
+    
+    const contentType = contentTypeMatch ? contentTypeMatch[1].trim().toLowerCase() : 'text/plain';
+    const charset = charsetMatch ? charsetMatch[1].trim() : 'utf-8';
+    const encoding = encodingMatch ? encodingMatch[1].trim().toLowerCase() : '7bit';
+    
+    // Find body start
+    const bodyStart = rawBody.indexOf('\r\n\r\n');
+    let body = bodyStart > 0 ? rawBody.substring(bodyStart + 4) : rawBody;
+    
+    // Decode based on transfer encoding
+    if (encoding === 'base64') {
+      body = decodeBase64(body, charset);
+    } else if (encoding === 'quoted-printable') {
+      body = decodeQuotedPrintable(body);
+    }
+    
+    if (contentType.includes('text/html')) {
+      htmlContent = body;
+    } else {
+      textContent = body;
+    }
+  }
+  
+  // Prefer plain text, fallback to stripped HTML
+  if (textContent) {
+    return textContent.trim();
+  } else if (htmlContent) {
+    // Strip HTML tags and decode entities
+    return htmlContent
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  
+  // Fallback: try to extract any readable text
+  return rawBody
+    .replace(/Content-Type:[^\r\n]+\r\n/gi, '')
+    .replace(/Content-Transfer-Encoding:[^\r\n]+\r\n/gi, '')
+    .replace(/Content-Disposition:[^\r\n]+\r\n/gi, '')
+    .replace(/--[a-f0-9\-]+/gi, '')
+    .replace(/\r\n\r\n/g, '\n')
+    .trim();
 }
 
 // Fetch emails via IMAP
@@ -275,11 +424,8 @@ async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'
                 email.id = headers['message-id'].replace(/[<>]/g, '');
               }
               
-              email.body = bodyBuffer
-                .replace(/<[^>]*>/g, '')
-                .replace(/=\r\n/g, '')
-                .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-                .substring(0, 2000) || '(No content)';
+              // Parse MIME body properly
+              email.body = parseMIMEBody(bodyBuffer).substring(0, 5000) || '(No content)';
               
               if (email.subject || email.fromEmail) {
                 emails.push(email as Email);
@@ -575,7 +721,7 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
       try {
         const headerEnd = raw.indexOf('\r\n\r\n');
         const headers = headerEnd > 0 ? raw.substring(0, headerEnd) : raw;
-        const body = headerEnd > 0 ? raw.substring(headerEnd + 4) : '';
+        const rawBody = headerEnd > 0 ? raw.substring(headerEnd + 4) : '';
         
         const getHeader = (name: string): string => {
           const regex = new RegExp(`^${name}:\\s*(.+)$`, 'im');
@@ -586,13 +732,16 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
         const from = getHeader('From');
         const parsed = parseEmailAddress(from);
         
+        // Parse MIME body properly
+        const parsedBody = parseMIMEBody(rawBody);
+        
         return {
           id: generateEmailId(),
           from: decodeMimeWord(parsed.name) || parsed.email || 'Unknown',
           fromEmail: parsed.email || '',
           subject: decodeMimeWord(getHeader('Subject')) || '(No Subject)',
           date: getHeader('Date') || new Date().toISOString(),
-          body: body.replace(/<[^>]*>/g, '').replace(/=\r\n/g, '').substring(0, 1000) || '',
+          body: parsedBody.substring(0, 5000) || '(No content)',
           read: true,
           starred: false
         };
