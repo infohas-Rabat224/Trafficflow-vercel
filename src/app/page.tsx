@@ -4771,8 +4771,8 @@ const MainContent = () => {
   // ===== EMAIL CENTER STATE =====
   const [emailConfig, setEmailConfig] = usePersistentState<{
     smtp: { host: string; port: number; username: string; password: string; encryption: 'ssl' | 'tls' | 'none' };
-    imap: { host: string; port: number; username: string; password: string; useSSL: boolean };
-    pop: { host: string; port: number; username: string; password: string; useSSL: boolean };
+    imap: { host: string; port: number; username: string; password: string; encryption: 'ssl' | 'tls' | 'none' };
+    pop: { host: string; port: number; username: string; password: string; encryption: 'ssl' | 'tls' | 'none' };
     provider: 'custom' | 'gmail' | 'outlook' | 'sendgrid' | 'brevo';
     sendgridApiKey: string;
     brevoApiKey: string;
@@ -4780,8 +4780,8 @@ const MainContent = () => {
     fromName: string;
   }>('tf_email_config', {
     smtp: { host: '', port: 587, username: '', password: '', encryption: 'tls' },
-    imap: { host: '', port: 993, username: '', password: '', useSSL: true },
-    pop: { host: '', port: 995, username: '', password: '', useSSL: true },
+    imap: { host: '', port: 993, username: '', password: '', encryption: 'ssl' },
+    pop: { host: '', port: 995, username: '', password: '', encryption: 'ssl' },
     provider: 'custom',
     sendgridApiKey: '',
     brevoApiKey: '',
@@ -4793,8 +4793,8 @@ const MainContent = () => {
   const safeEmailConfig = {
     ...emailConfig,
     smtp: emailConfig.smtp || { host: '', port: 587, username: '', password: '', encryption: 'tls' as const },
-    imap: emailConfig.imap || { host: '', port: 993, username: '', password: '', useSSL: true },
-    pop: emailConfig.pop || { host: '', port: 995, username: '', password: '', useSSL: true }
+    imap: emailConfig.imap || { host: '', port: 993, username: '', password: '', encryption: 'ssl' as const },
+    pop: emailConfig.pop || { host: '', port: 995, username: '', password: '', encryption: 'ssl' as const }
   };
   
   const [emailFolders, setEmailFolders] = usePersistentState<{
@@ -14854,7 +14854,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           value={safeEmailConfig.imap?.host || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), host: e.target.value }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', encryption: 'ssl' as const }), host: e.target.value }
                           }))}
                           placeholder="imap.example.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14867,7 +14867,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           value={safeEmailConfig.imap?.port || 993}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), port: parseInt(e.target.value) }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', encryption: 'ssl' as const }), port: parseInt(e.target.value) }
                           }))}
                           placeholder="993"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14880,7 +14880,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           value={safeEmailConfig.imap?.username || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), username: e.target.value }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', encryption: 'ssl' as const }), username: e.target.value }
                           }))}
                           placeholder="your@email.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14893,34 +14893,34 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           value={safeEmailConfig.imap?.password || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), password: e.target.value }
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', encryption: 'ssl' as const }), password: e.target.value }
                           }))}
                           placeholder="••••••••"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         />
                       </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2">
-                      <input 
-                        type="checkbox" 
-                        id="imap-ssl"
-                        checked={safeEmailConfig.imap?.useSSL !== false}
-                        onChange={(e) => setEmailConfig(prev => ({
-                          ...prev,
-                          imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), useSSL: e.target.checked }
-                        }))}
-                        className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-                      />
-                      <label htmlFor="imap-ssl" className="text-xs text-slate-600">
-                        Use SSL/TLS encryption for secure connection
-                      </label>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Encryption</label>
+                        <select 
+                          value={safeEmailConfig.imap?.encryption || 'ssl'}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', encryption: 'ssl' as const }), encryption: e.target.value as any }
+                          }))}
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        >
+                          <option value="ssl">SSL (Port 993)</option>
+                          <option value="tls">TLS/StartTLS (Port 143)</option>
+                          <option value="none">None (Plain Text)</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                   
                   {/* POP3 Settings */}
                   <div className="border-t pt-6">
                     <h4 className="text-sm font-bold text-slate-700 mb-4">POP3 Settings (Incoming Email)</h4>
-                    <p className="text-xs text-slate-500 mb-3">POP3 downloads emails to this device. IMAP is recommended for multi-device sync. Scroll down to see all settings.</p>
+                    <p className="text-xs text-slate-500 mb-3">POP3 downloads emails to this device. IMAP is recommended for multi-device sync.</p>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase">POP3 Host</label>
@@ -14929,7 +14929,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           value={safeEmailConfig.pop?.host || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), host: e.target.value }
+                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', encryption: 'ssl' as const }), host: e.target.value }
                           }))}
                           placeholder="pop.example.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14939,12 +14939,12 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <label className="text-[10px] font-bold text-slate-500 uppercase">POP3 Port</label>
                         <input 
                           type="number" 
-                          value={safeEmailConfig.pop?.port || 995}
+                          value={safeEmailConfig.pop?.port || 110}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), port: parseInt(e.target.value) }
+                            pop: { ...(prev.pop || { host: '', port: 110, username: '', password: '', encryption: 'none' as const }), port: parseInt(e.target.value) }
                           }))}
-                          placeholder="995"
+                          placeholder="110"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         />
                       </div>
@@ -14955,7 +14955,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           value={safeEmailConfig.pop?.username || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), username: e.target.value }
+                            pop: { ...(prev.pop || { host: '', port: 110, username: '', password: '', encryption: 'none' as const }), username: e.target.value }
                           }))}
                           placeholder="your@email.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
@@ -14968,27 +14968,27 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           value={safeEmailConfig.pop?.password || ''}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), password: e.target.value }
+                            pop: { ...(prev.pop || { host: '', port: 110, username: '', password: '', encryption: 'none' as const }), password: e.target.value }
                           }))}
                           placeholder="••••••••"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         />
                       </div>
-                    </div>
-                    <div className="mt-4 flex items-center gap-2">
-                      <input 
-                        type="checkbox" 
-                        id="pop-ssl"
-                        checked={safeEmailConfig.pop?.useSSL !== false}
-                        onChange={(e) => setEmailConfig(prev => ({
-                          ...prev,
-                          pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), useSSL: e.target.checked }
-                        }))}
-                        className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-                      />
-                      <label htmlFor="pop-ssl" className="text-xs text-slate-600">
-                        Use SSL/TLS encryption for secure connection
-                      </label>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Encryption</label>
+                        <select 
+                          value={safeEmailConfig.pop?.encryption || 'none'}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            pop: { ...(prev.pop || { host: '', port: 110, username: '', password: '', encryption: 'none' as const }), encryption: e.target.value as any }
+                          }))}
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        >
+                          <option value="ssl">SSL (Port 995)</option>
+                          <option value="tls">TLS/StartTLS (Port 110)</option>
+                          <option value="none">None/Plain Text (Port 110)</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 </>

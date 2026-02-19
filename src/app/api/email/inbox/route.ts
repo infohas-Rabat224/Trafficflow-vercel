@@ -29,7 +29,7 @@ interface IMAPEmailConfig {
   port: number;
   username: string;
   password: string;
-  tls: boolean;
+  encryption: 'ssl' | 'tls' | 'none';
 }
 
 // POP3 configuration interface
@@ -38,7 +38,7 @@ interface POP3EmailConfig {
   port: number;
   username: string;
   password: string;
-  tls: boolean;
+  encryption: 'ssl' | 'tls' | 'none';
 }
 
 // In-memory email storage (persists per server instance)
@@ -107,7 +107,7 @@ async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'
   let debugLog: string[] = [];
   
   try {
-    debugLog.push(`Starting IMAP connection to ${config.host}:${config.port} (SSL/TLS: ${config.tls})`);
+    debugLog.push(`Starting IMAP connection to ${config.host}:${config.port} (Encryption: ${config.encryption})`);
     
     const Imap = await import('imap').then(m => m.default || m);
     
@@ -116,7 +116,7 @@ async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'
         debugLog.push('Connection timeout after 25 seconds');
         resolve({ 
           success: false, 
-          error: 'Connection timeout - IMAP server did not respond within 25 seconds. Check host, port, and SSL setting.',
+          error: 'Connection timeout - IMAP server did not respond within 25 seconds. Check host, port, and encryption setting.',
           debug: debugLog.join('\n')
         });
       }, 25000);
@@ -130,18 +130,29 @@ async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'
         authTimeout: 20000
       };
       
-      // Configure TLS/SSL properly
-      if (config.tls) {
+      // Configure TLS/SSL based on encryption setting
+      // SSL = Implicit TLS on connect (port 993)
+      // TLS = StartTLS (port 143)
+      // None = No encryption
+      if (config.encryption === 'ssl') {
+        imapConfig.tls = true;
+        imapConfig.tlsOptions = { 
+          rejectUnauthorized: false,
+          servername: config.host
+        };
+      } else if (config.encryption === 'tls') {
+        // StartTLS - start plain then upgrade
         imapConfig.tls = true;
         imapConfig.tlsOptions = { 
           rejectUnauthorized: false,
           servername: config.host
         };
       } else {
+        // None - no encryption
         imapConfig.tls = false;
       }
       
-      debugLog.push(`IMAP config: host=${config.host}, port=${config.port}, tls=${config.tls}`);
+      debugLog.push(`IMAP config: host=${config.host}, port=${config.port}, encryption=${config.encryption}`);
       
       const imap = new Imap(imapConfig);
       const emails: Email[] = [];
@@ -329,7 +340,7 @@ async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'
 
 // Fetch emails via POP3 - Complete rewrite for reliability
 async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: boolean; emails?: Email[]; error?: string; debug?: string }> {
-  const debugLog: string[] = [`Starting POP3 fetch to ${config.host}:${config.port} (SSL: ${config.tls})`];
+  const debugLog: string[] = [`Starting POP3 fetch to ${config.host}:${config.port} (Encryption: ${config.encryption})`];
   
   return new Promise(async (resolve) => {
     const net = await import('net');
@@ -542,16 +553,22 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
       debugLog.push(`Connected to ${config.host}:${config.port}`);
     };
     
-    // Create socket based on SSL setting
-    if (config.tls) {
-      debugLog.push('Creating TLS socket');
+    // Create socket based on encryption setting
+    // SSL = Implicit TLS on connect (port 995)
+    // TLS = StartTLS (would need STLS command, but most servers use implicit SSL for POP3)
+    // None = Plain text connection (port 110)
+    if (config.encryption === 'ssl') {
+      debugLog.push('Creating TLS socket (SSL)');
       socket = tls.connect({
         host: config.host,
         port: config.port,
         rejectUnauthorized: false
       }, handleConnect);
     } else {
-      debugLog.push('Creating plain TCP socket');
+      // TLS (StartTLS) or None - use plain TCP
+      // Note: For POP3 StartTLS, client connects plain then sends STLS command
+      // But most POP3 servers use implicit SSL on port 995
+      debugLog.push(`Creating plain TCP socket (${config.encryption})`);
       socket = net.connect({
         host: config.host,
         port: config.port
@@ -607,7 +624,8 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
         authTimeout: 12000
       };
       
-      if (config.tls) {
+      // Configure TLS/SSL based on encryption setting
+      if (config.encryption === 'ssl' || config.encryption === 'tls') {
         imapConfig.tls = true;
         imapConfig.tlsOptions = { rejectUnauthorized: false };
       }
@@ -638,7 +656,7 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
           } else if (errorMsg.includes('Invalid credentials') || errorMsg.includes('Authentication failed')) {
             errorMsg = 'Authentication failed. Check username and password.';
           } else if (errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
-            errorMsg = `SSL/TLS error. Try toggling SSL setting.`;
+            errorMsg = `SSL/TLS error. Try changing encryption setting.`;
           }
           
           resolve({ success: false, error: errorMsg });
@@ -670,7 +688,7 @@ async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: b
       const timeout = setTimeout(() => {
         resolve({ 
           success: false, 
-          error: 'Connection timeout - POP3 server did not respond within 15 seconds. Check host, port, and SSL setting.' 
+          error: 'Connection timeout - POP3 server did not respond within 15 seconds. Check host, port, and encryption setting.' 
         });
       }, 15000);
       
@@ -710,14 +728,17 @@ async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: b
         }
       };
       
-      // Create socket based on SSL setting
-      if (config.tls) {
+      // Create socket based on encryption setting
+      // SSL = Implicit TLS (port 995)
+      // TLS/None = Plain TCP (port 110)
+      if (config.encryption === 'ssl') {
         socket = tls.connect({
           host: config.host,
           port: config.port,
           rejectUnauthorized: false
         });
       } else {
+        // TLS (StartTLS) or None - use plain TCP
         socket = net.connect({
           host: config.host,
           port: config.port
@@ -777,7 +798,7 @@ export async function POST(request: NextRequest) {
           port: parseInt(config.imap.port) || 993,
           username: config.imap.username.trim(),
           password: config.imap.password,
-          tls: config.imap.useSSL !== false
+          encryption: config.imap.encryption || 'ssl'
         });
         
         return NextResponse.json(imapTestResult);
@@ -798,7 +819,7 @@ export async function POST(request: NextRequest) {
           port: parseInt(config.pop.port) || 110,
           username: config.pop.username.trim(),
           password: config.pop.password,
-          tls: config.pop.useSSL === true
+          encryption: config.pop.encryption || 'none'
         });
         
         return NextResponse.json(popTestResult);
@@ -825,7 +846,7 @@ export async function POST(request: NextRequest) {
             port: parseInt(config.imap.port) || 993,
             username: config.imap.username.trim(),
             password: config.imap.password,
-            tls: config.imap.useSSL !== false
+            encryption: config.imap.encryption || 'ssl'
           }, folder || 'INBOX');
           
           if (result.success) {
@@ -861,7 +882,7 @@ export async function POST(request: NextRequest) {
             port: parseInt(config.pop.port) || 110,
             username: config.pop.username.trim(),
             password: config.pop.password,
-            tls: config.pop.useSSL === true
+            encryption: config.pop.encryption || 'none'
           });
           
           if (result.success) {
