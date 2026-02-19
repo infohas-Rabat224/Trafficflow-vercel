@@ -4,7 +4,7 @@ import { NextResponse, NextRequest } from "next/server";
  * Email Inbox API
  * 
  * Handles email operations like fetching, deleting, moving, etc.
- * Uses IMAP for receiving emails (when configured).
+ * Supports both IMAP and POP3 for receiving emails.
  */
 
 // Email interface
@@ -32,8 +32,16 @@ interface IMAPEmailConfig {
   tls: boolean;
 }
 
+// POP3 configuration interface
+interface POP3EmailConfig {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  tls: boolean;
+}
+
 // In-memory email storage (persists per server instance)
-// In production, this would be a database
 let emailStore: {
   inbox: Email[];
   sent: Email[];
@@ -53,157 +61,466 @@ function generateEmailId(): string {
   return `email_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Fetch emails via IMAP with timeout handling
-async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'): Promise<{ success: boolean; emails?: Email[]; error?: string }> {
+// Parse email address from header
+function parseEmailAddress(header: string): { name: string; email: string } {
+  if (!header) return { name: '', email: '' };
+  
+  // Try to match "Name <email@domain.com>" format
+  const match = header.match(/(?:"?([^"]*)"?\s)?<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i);
+  if (match) {
+    return {
+      name: match[1]?.trim() || match[2],
+      email: match[2]
+    };
+  }
+  
+  // Just an email address
+  const emailMatch = header.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+  if (emailMatch) {
+    return { name: emailMatch[1], email: emailMatch[1] };
+  }
+  
+  return { name: header, email: header };
+}
+
+// Decode MIME encoded words (like =?UTF-8?B?...?=)
+function decodeMimeWord(str: string): string {
+  if (!str) return '';
+  
+  // Decode UTF-8 base64 encoded subjects
+  return str.replace(/=\?UTF-8\?B\?([A-Za-z0-9+/=]+)\?=/gi, (_, base64) => {
+    try {
+      return Buffer.from(base64, 'base64').toString('utf-8');
+    } catch {
+      return base64;
+    }
+  }).replace(/=\?UTF-8\?Q\?([^?]+)\?=/gi, (_, quoted) => {
+    try {
+      return quoted.replace(/=([0-9A-F]{2})/gi, (_, hex) => 
+        String.fromCharCode(parseInt(hex, 16))
+      );
+    } catch {
+      return quoted;
+    }
+  });
+}
+
+// Fetch emails via IMAP with improved error handling
+async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'): Promise<{ success: boolean; emails?: Email[]; error?: string; debug?: string }> {
+  let debugLog: string[] = [];
+  
   try {
+    debugLog.push(`Starting IMAP connection to ${config.host}:${config.port}`);
+    
     const Imap = await import('imap').then(m => m.default || m);
     
     return new Promise((resolve) => {
-      // Create timeout to prevent hanging
       const timeout = setTimeout(() => {
+        debugLog.push('Connection timeout after 20 seconds');
         resolve({ 
           success: false, 
-          error: 'Connection timeout - IMAP server did not respond within 15 seconds. Please check your server address, port, and firewall settings.' 
+          error: 'Connection timeout - IMAP server did not respond within 20 seconds.',
+          debug: debugLog.join('\n')
         });
-      }, 15000);
+      }, 20000);
       
-      const imap = new Imap({
+      const imapConfig: any = {
         user: config.username,
         password: config.password,
         host: config.host,
         port: config.port,
-        tls: config.tls,
-        tlsOptions: { 
+        connTimeout: 15000,
+        authTimeout: 15000
+      };
+      
+      // Configure TLS/SSL
+      if (config.tls) {
+        imapConfig.tls = true;
+        imapConfig.tlsOptions = { 
           rejectUnauthorized: false,
           servername: config.host
-        },
-        connTimeout: 10000,  // 10 second connection timeout
-        authTimeout: 10000   // 10 second auth timeout
-      });
+        };
+      }
       
+      debugLog.push(`IMAP config: ${JSON.stringify({...imapConfig, password: '***'})}`);
+      
+      const imap = new Imap(imapConfig);
       const emails: Email[] = [];
       let resolved = false;
       
       const cleanup = () => {
         clearTimeout(timeout);
-        try { imap.destroy(); } catch (e) { /* ignore */ }
+        try { imap.destroy(); } catch (e) { debugLog.push(`Destroy error: ${e}`); }
       };
       
       imap.once('ready', () => {
-        clearTimeout(timeout); // Clear timeout on successful connection
+        debugLog.push('IMAP connection ready');
         
-        imap.openBox(folder, false, (err: Error | null, box: any) => {
+        imap.openBox(folder, true, (err: Error | null, box: any) => {
           if (err) {
+            debugLog.push(`Failed to open folder: ${err.message}`);
             cleanup();
             if (!resolved) {
               resolved = true;
-              resolve({ success: false, error: `Failed to open folder: ${err.message}` });
+              resolve({ success: false, error: `Failed to open folder: ${err.message}`, debug: debugLog.join('\n') });
             }
             return;
           }
+          
+          debugLog.push(`Opened folder ${folder}, total messages: ${box.messages.total}`);
           
           if (box.messages.total === 0) {
+            debugLog.push('No messages in folder');
             cleanup();
             if (!resolved) {
               resolved = true;
-              resolve({ success: true, emails: [] });
+              resolve({ success: true, emails: [], debug: debugLog.join('\n') });
             }
             return;
           }
           
-          // Fetch last 20 emails
+          // Fetch last 20 emails with full bodies
           const start = Math.max(1, box.messages.total - 19);
+          debugLog.push(`Fetching messages ${start} to ${box.messages.total}`);
+          
           const fetch = imap.seq.fetch(`${start}:${box.messages.total}`, {
-            bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)', 'TEXT'],
-            struct: true
+            bodies: ['', 'HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)', 'TEXT'],
+            struct: true,
+            markSeen: false
           });
           
           fetch.on('message', (msg: any, seqno: number) => {
-            let email: Partial<Email> = { id: generateEmailId(), read: true, starred: false, body: '' };
-            let headerBuffer = '';
-            let bodyBuffer = '';
+            let email: Partial<Email> = { 
+              id: generateEmailId(), 
+              read: false, 
+              starred: false, 
+              body: '',
+              subject: '(No Subject)',
+              from: 'Unknown',
+              fromEmail: '',
+              date: new Date().toISOString()
+            };
+            let headers: any = {};
+            let bodyParts: string[] = [];
             
             msg.on('body', (stream: any, info: any) => {
-              stream.on('data', (chunk: string) => {
-                if (info.which === 'TEXT') {
-                  bodyBuffer += chunk;
-                } else {
-                  headerBuffer += chunk;
-                }
+              let buffer = '';
+              
+              stream.on('data', (chunk: Buffer) => {
+                buffer += chunk.toString('utf-8');
               });
+              
               stream.once('end', () => {
-                // Parse headers
-                const fromMatch = headerBuffer.match(/From: (.+)/i);
-                const toMatch = headerBuffer.match(/To: (.+)/i);
-                const subjectMatch = headerBuffer.match(/Subject: (.+)/i);
-                const dateMatch = headerBuffer.match(/Date: (.+)/i);
-                
-                if (fromMatch) {
-                  const fromParts = fromMatch[1].match(/"?([^"]*)"? ?<(.+)>/) || ['', fromMatch[1].trim(), fromMatch[1].trim()];
-                  email.from = fromParts[1].replace(/"/g, '').trim() || fromMatch[1].trim();
-                  email.fromEmail = fromParts[2] || fromMatch[1].trim();
+                if (info.which === 'HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)') {
+                  // Parse headers
+                  const lines = buffer.split('\r\n');
+                  let currentHeader = '';
+                  let currentValue = '';
+                  
+                  lines.forEach(line => {
+                    const headerMatch = line.match(/^([A-Z-]+):\s*(.*)$/i);
+                    if (headerMatch) {
+                      if (currentHeader) {
+                        headers[currentHeader.toLowerCase()] = currentValue.trim();
+                      }
+                      currentHeader = headerMatch[1];
+                      currentValue = headerMatch[2];
+                    } else if (line.startsWith(' ') || line.startsWith('\t')) {
+                      currentValue += ' ' + line.trim();
+                    }
+                  });
+                  
+                  if (currentHeader) {
+                    headers[currentHeader.toLowerCase()] = currentValue.trim();
+                  }
+                } else if (info.which === 'TEXT') {
+                  bodyParts.push(buffer);
+                } else if (info.which === '') {
+                  // Full body - try to extract text
+                  bodyParts.push(buffer);
                 }
-                if (toMatch) email.toEmail = toMatch[1];
-                if (subjectMatch) email.subject = subjectMatch[1].trim();
-                if (dateMatch) email.date = dateMatch[1];
-                
-                // Set body (first 500 chars)
-                email.body = bodyBuffer.substring(0, 500);
               });
             });
             
+            msg.once('attributes', (attrs: any) => {
+              // Check if email is seen
+              if (attrs.flags && attrs.flags.includes('\\Seen')) {
+                email.read = true;
+              }
+            });
+            
             msg.once('end', () => {
-              if (email.subject || email.from) {
+              // Process headers
+              if (headers.from) {
+                const parsed = parseEmailAddress(headers.from);
+                email.from = decodeMimeWord(parsed.name) || parsed.email;
+                email.fromEmail = parsed.email;
+              }
+              
+              if (headers.to) {
+                email.toEmail = headers.to;
+              }
+              
+              if (headers.subject) {
+                email.subject = decodeMimeWord(headers.subject) || '(No Subject)';
+              }
+              
+              if (headers.date) {
+                try {
+                  email.date = new Date(headers.date).toISOString();
+                } catch {
+                  email.date = headers.date;
+                }
+              }
+              
+              if (headers['message-id']) {
+                email.id = headers['message-id'].replace(/[<>]/g, '');
+              }
+              
+              // Process body
+              let fullBody = bodyParts.join('\n');
+              // Clean up body - remove HTML tags if present, get plain text
+              fullBody = fullBody
+                .replace(/<[^>]*>/g, '') // Remove HTML tags
+                .replace(/=\r\n/g, '') // Remove quoted-printable line breaks
+                .replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))) // Decode quoted-printable
+                .substring(0, 2000); // Limit body size
+              
+              email.body = fullBody.trim() || '(No content)';
+              
+              if (email.subject || email.fromEmail) {
                 emails.push(email as Email);
               }
+              
+              debugLog.push(`Processed message ${seqno}: ${email.subject}`);
             });
           });
           
           fetch.once('error', (err: Error) => {
+            debugLog.push(`Fetch error: ${err.message}`);
             cleanup();
             if (!resolved) {
               resolved = true;
-              resolve({ success: false, error: `Fetch error: ${err.message}` });
+              resolve({ success: false, error: `Fetch error: ${err.message}`, debug: debugLog.join('\n') });
             }
           });
           
           fetch.once('end', () => {
+            debugLog.push(`Fetch complete, got ${emails.length} emails`);
             imap.end();
           });
         });
       });
       
       imap.once('error', (err: Error) => {
+        debugLog.push(`IMAP error: ${err.message}`);
         cleanup();
         if (!resolved) {
           resolved = true;
           
-          // Provide helpful error messages
           let errorMsg = err.message;
           if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
-            errorMsg = `Cannot connect to IMAP server at ${config.host}:${config.port}. Check server address and port, and ensure firewall allows the connection.`;
-          } else if (errorMsg.includes('Invalid credentials') || errorMsg.includes('Authentication failed')) {
-            errorMsg = 'Authentication failed. Check your username and password.';
-          } else if (errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
-            errorMsg = 'SSL/TLS error. Try toggling the SSL setting or check if the port is correct (993 for SSL, 143 for non-SSL).';
+            errorMsg = `Cannot connect to ${config.host}:${config.port}. Check server address, port, and firewall.`;
+          } else if (errorMsg.includes('Invalid credentials') || errorMsg.includes('Authentication failed') || errorMsg.includes('Logon failure')) {
+            errorMsg = 'Authentication failed. Check username and password.';
+          } else if (errorMsg.includes('SSL') || errorMsg.includes('TLS') || errorMsg.includes('certificate')) {
+            errorMsg = 'SSL/TLS error. Try toggling SSL or check port (993 for SSL, 143 for StartTLS).';
+          } else if (errorMsg.includes('Too many')) {
+            errorMsg = 'Too many connections. Wait a moment and try again.';
           }
           
-          resolve({ success: false, error: `IMAP connection failed: ${errorMsg}` });
+          resolve({ success: false, error: errorMsg, debug: debugLog.join('\n') });
         }
       });
       
       imap.once('end', () => {
+        debugLog.push('IMAP connection ended');
         clearTimeout(timeout);
         if (!resolved) {
           resolved = true;
-          resolve({ success: true, emails });
+          resolve({ success: true, emails, debug: debugLog.join('\n') });
         }
       });
       
       imap.connect();
     });
   } catch (error: any) {
-    return { success: false, error: error.message };
+    debugLog.push(`Exception: ${error.message}`);
+    return { success: false, error: error.message, debug: debugLog.join('\n') };
+  }
+}
+
+// Fetch emails via POP3
+async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: boolean; emails?: Email[]; error?: string; debug?: string }> {
+  let debugLog: string[] = [];
+  
+  try {
+    debugLog.push(`Starting POP3 connection to ${config.host}:${config.port}`);
+    
+    // POP3 implementation using net socket
+    const net = await import('net');
+    
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        debugLog.push('Connection timeout after 20 seconds');
+        resolve({ 
+          success: false, 
+          error: 'Connection timeout - POP3 server did not respond within 20 seconds.',
+          debug: debugLog.join('\n')
+        });
+      }, 20000);
+      
+      const socket = new net.Socket();
+      let emails: Email[] = [];
+      let currentStep = 'connect';
+      let emailList: { num: number; size: number }[] = [];
+      let currentEmail: Partial<Email> | null = null;
+      let emailBuffer = '';
+      
+      const sendCommand = (cmd: string) => {
+        debugLog.push(`SEND: ${cmd}`);
+        socket.write(cmd + '\r\n');
+      };
+      
+      socket.on('data', (data: Buffer) => {
+        const response = data.toString();
+        debugLog.push(`RECV: ${response.substring(0, 200)}...`);
+        
+        if (currentStep === 'connect') {
+          // Wait for server greeting
+          if (response.startsWith('+OK')) {
+            currentStep = 'user';
+            sendCommand(`USER ${config.username}`);
+          } else {
+            clearTimeout(timeout);
+            resolve({ success: false, error: 'Server greeting failed', debug: debugLog.join('\n') });
+          }
+        } else if (currentStep === 'user') {
+          if (response.startsWith('+OK')) {
+            currentStep = 'pass';
+            sendCommand(`PASS ${config.password}`);
+          } else {
+            clearTimeout(timeout);
+            resolve({ success: false, error: 'Username rejected', debug: debugLog.join('\n') });
+          }
+        } else if (currentStep === 'pass') {
+          if (response.startsWith('+OK')) {
+            currentStep = 'list';
+            sendCommand('LIST');
+          } else {
+            clearTimeout(timeout);
+            resolve({ success: false, error: 'Authentication failed. Check username and password.', debug: debugLog.join('\n') });
+          }
+        } else if (currentStep === 'list') {
+          if (response.includes('.')) {
+            // Parse email list
+            const lines = response.split('\r\n');
+            lines.forEach(line => {
+              const match = line.match(/^(\d+)\s+(\d+)$/);
+              if (match) {
+                emailList.push({ num: parseInt(match[1]), size: parseInt(match[2]) });
+              }
+            });
+            
+            debugLog.push(`Found ${emailList.length} emails`);
+            
+            if (emailList.length === 0) {
+              sendCommand('QUIT');
+              clearTimeout(timeout);
+              resolve({ success: true, emails: [], debug: debugLog.join('\n') });
+              return;
+            }
+            
+            // Fetch emails (last 10)
+            const toFetch = emailList.slice(-10);
+            currentStep = 'retr';
+            currentEmail = { id: generateEmailId(), read: true, starred: false, body: '' };
+            sendCommand(`RETR ${toFetch[0].num}`);
+          }
+        } else if (currentStep === 'retr') {
+          if (response.includes('\r\n.\r\n') || response.endsWith('\r\n.\r\n')) {
+            // Email complete
+            emailBuffer += response;
+            
+            // Parse email
+            const headerMatch = emailBuffer.match(/^(.*?)\r\n\r\n/s);
+            if (headerMatch) {
+              const headers = headerMatch[1];
+              
+              const fromMatch = headers.match(/From:\s*(.+)/i);
+              const subjectMatch = headers.match(/Subject:\s*(.+)/i);
+              const dateMatch = headers.match(/Date:\s*(.+)/i);
+              
+              if (fromMatch) {
+                const parsed = parseEmailAddress(fromMatch[1]);
+                currentEmail!.from = decodeMimeWord(parsed.name) || parsed.email;
+                currentEmail!.fromEmail = parsed.email;
+              }
+              
+              if (subjectMatch) {
+                currentEmail!.subject = decodeMimeWord(subjectMatch[1]) || '(No Subject)';
+              }
+              
+              if (dateMatch) {
+                try {
+                  currentEmail!.date = new Date(dateMatch[1]).toISOString();
+                } catch {
+                  currentEmail!.date = dateMatch[1];
+                }
+              }
+            }
+            
+            // Extract body
+            const bodyMatch = emailBuffer.match(/\r\n\r\n([\s\S]*?)\r\n\.\r\n/);
+            if (bodyMatch) {
+              currentEmail!.body = bodyMatch[1]
+                .replace(/<[^>]*>/g, '')
+                .replace(/=\r\n/g, '')
+                .substring(0, 1000);
+            }
+            
+            if (currentEmail!.subject || currentEmail!.fromEmail) {
+              emails.push(currentEmail as Email);
+            }
+            
+            // Move to next email or quit
+            const fetched = emails.length;
+            const toFetch = emailList.slice(-10);
+            
+            if (fetched < toFetch.length) {
+              currentEmail = { id: generateEmailId(), read: true, starred: false, body: '' };
+              emailBuffer = '';
+              sendCommand(`RETR ${toFetch[fetched].num}`);
+            } else {
+              sendCommand('QUIT');
+              clearTimeout(timeout);
+              resolve({ success: true, emails, debug: debugLog.join('\n') });
+            }
+          } else {
+            emailBuffer += response;
+          }
+        }
+      });
+      
+      socket.on('error', (err: Error) => {
+        debugLog.push(`Socket error: ${err.message}`);
+        clearTimeout(timeout);
+        resolve({ success: false, error: `Connection error: ${err.message}`, debug: debugLog.join('\n') });
+      });
+      
+      socket.on('close', () => {
+        debugLog.push('Connection closed');
+        clearTimeout(timeout);
+      });
+      
+      socket.connect({
+        host: config.host,
+        port: config.port
+      });
+    });
+  } catch (error: any) {
+    debugLog.push(`Exception: ${error.message}`);
+    return { success: false, error: error.message, debug: debugLog.join('\n') };
   }
 }
 
@@ -216,24 +533,25 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
       const timeout = setTimeout(() => {
         resolve({ 
           success: false, 
-          error: 'Connection timeout - IMAP server did not respond within 10 seconds' 
+          error: 'Connection timeout - IMAP server did not respond within 15 seconds' 
         });
-      }, 10000);
+      }, 15000);
       
-      const imap = new Imap({
+      const imapConfig: any = {
         user: config.username,
         password: config.password,
         host: config.host,
         port: config.port,
-        tls: config.tls,
-        tlsOptions: { 
-          rejectUnauthorized: false,
-          servername: config.host
-        },
-        connTimeout: 8000,
-        authTimeout: 8000
-      });
+        connTimeout: 12000,
+        authTimeout: 12000
+      };
       
+      if (config.tls) {
+        imapConfig.tls = true;
+        imapConfig.tlsOptions = { rejectUnauthorized: false };
+      }
+      
+      const imap = new Imap(imapConfig);
       let resolved = false;
       
       imap.once('ready', () => {
@@ -243,7 +561,7 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
           resolved = true;
           resolve({ 
             success: true, 
-            message: `Successfully connected to IMAP server at ${config.host}:${config.port}` 
+            message: `✅ Connected to IMAP server ${config.host}:${config.port}` 
           });
         }
       });
@@ -255,11 +573,11 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
           
           let errorMsg = err.message;
           if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
-            errorMsg = `Cannot connect to ${config.host}:${config.port}. Check server address and port.`;
-          } else if (errorMsg.includes('Invalid credentials') || errorMsg.includes('Authentication failed')) {
+            errorMsg = `Cannot connect to ${config.host}:${config.port}. Check address and port.`;
+          } else if (errorMsg.includes('Invalid credentials') || errorMsg.includes('Authentication failed') || errorMsg.includes('Logon failure')) {
             errorMsg = 'Authentication failed. Check username and password.';
           } else if (errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
-            errorMsg = 'SSL/TLS error. Try toggling SSL or check port (993 for SSL, 143 for non-SSL).';
+            errorMsg = 'SSL/TLS error. Try toggling SSL or check port (993 for SSL).';
           }
           
           resolve({ success: false, error: errorMsg });
@@ -281,76 +599,201 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
   }
 }
 
+// Test POP3 connection
+async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    const net = await import('net');
+    
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ 
+          success: false, 
+          error: 'Connection timeout - POP3 server did not respond within 15 seconds' 
+        });
+      }, 15000);
+      
+      const socket = new net.Socket();
+      let resolved = false;
+      let step = 'connect';
+      
+      socket.on('data', (data: Buffer) => {
+        const response = data.toString();
+        
+        if (step === 'connect' && response.startsWith('+OK')) {
+          step = 'user';
+          socket.write(`USER ${config.username}\r\n`);
+        } else if (step === 'user' && response.startsWith('+OK')) {
+          step = 'pass';
+          socket.write(`PASS ${config.password}\r\n`);
+        } else if (step === 'pass' && response.startsWith('+OK')) {
+          socket.write('QUIT\r\n');
+          clearTimeout(timeout);
+          if (!resolved) {
+            resolved = true;
+            resolve({ 
+              success: true, 
+              message: `✅ Connected to POP3 server ${config.host}:${config.port}` 
+            });
+          }
+        } else if (response.startsWith('-ERR')) {
+          clearTimeout(timeout);
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: 'Authentication failed. Check username and password.' });
+          }
+        }
+      });
+      
+      socket.on('error', (err: Error) => {
+        clearTimeout(timeout);
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: `Connection error: ${err.message}` });
+        }
+      });
+      
+      socket.connect({
+        host: config.host,
+        port: config.port
+      });
+    });
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, config, emailId, folder, email, targetFolder } = body;
+    const { action, config, emailId, folder, email, targetFolder, protocol } = body;
     
     switch (action) {
       case 'test_imap':
-        // Validate IMAP config
         if (!config?.imap?.host) {
-          return NextResponse.json({
-            success: false,
-            error: 'IMAP host is required'
-          });
+          return NextResponse.json({ success: false, error: 'IMAP host is required' });
         }
         if (!config?.imap?.username) {
-          return NextResponse.json({
-            success: false,
-            error: 'IMAP username is required'
-          });
+          return NextResponse.json({ success: false, error: 'IMAP username is required' });
         }
         if (!config?.imap?.password) {
-          return NextResponse.json({
-            success: false,
-            error: 'IMAP password is required'
-          });
+          return NextResponse.json({ success: false, error: 'IMAP password is required' });
         }
         
-        const testResult = await testIMAPConnection({
-          host: config.imap.host,
-          port: config.imap.port || 993,
-          username: config.imap.username,
-          password: config.imap.password,
-          tls: config.imap.useSSL !== false // Default to true
-        });
-        
-        return NextResponse.json(testResult);
-        
-      case 'fetch':
-        if (!config?.imap?.host || !config?.imap?.username || !config?.imap?.password) {
-          return NextResponse.json({
-            success: false,
-            error: 'IMAP configuration required. Configure IMAP settings in email configuration.',
-            emails: [],
-            requiresConfig: true
-          });
-        }
-        
-        const result = await fetchIMAPEmails({
+        const imapTestResult = await testIMAPConnection({
           host: config.imap.host,
           port: config.imap.port || 993,
           username: config.imap.username,
           password: config.imap.password,
           tls: config.imap.useSSL !== false
-        }, folder || 'INBOX');
+        });
         
-        if (result.success) {
-          const target = folder === 'INBOX' ? 'inbox' : folder?.toLowerCase() || 'inbox';
-          emailStore[target as keyof typeof emailStore] = result.emails || [];
+        return NextResponse.json(imapTestResult);
+        
+      case 'test_pop':
+        if (!config?.pop?.host) {
+          return NextResponse.json({ success: false, error: 'POP3 host is required' });
+        }
+        if (!config?.pop?.username) {
+          return NextResponse.json({ success: false, error: 'POP3 username is required' });
+        }
+        if (!config?.pop?.password) {
+          return NextResponse.json({ success: false, error: 'POP3 password is required' });
+        }
+        
+        const popTestResult = await testPOP3Connection({
+          host: config.pop.host,
+          port: config.pop.port || 995,
+          username: config.pop.username,
+          password: config.pop.password,
+          tls: config.pop.useSSL !== false
+        });
+        
+        return NextResponse.json(popTestResult);
+        
+      case 'fetch':
+        // Determine which protocol to use
+        const useIMAP = protocol === 'imap' || (config?.imap?.host && !config?.pop?.host);
+        const usePOP = protocol === 'pop' || config?.pop?.host;
+        
+        if (useIMAP && config?.imap?.host) {
+          if (!config.imap.username || !config.imap.password) {
+            return NextResponse.json({
+              success: false,
+              error: 'IMAP username and password required',
+              emails: []
+            });
+          }
           
-          return NextResponse.json({
-            success: true,
-            emails: result.emails,
-            folder: target,
-            message: `Fetched ${result.emails?.length || 0} emails`
+          const result = await fetchIMAPEmails({
+            host: config.imap.host,
+            port: config.imap.port || 993,
+            username: config.imap.username,
+            password: config.imap.password,
+            tls: config.imap.useSSL !== false
+          }, folder || 'INBOX');
+          
+          if (result.success) {
+            // Reverse to show newest first
+            const emails = (result.emails || []).reverse();
+            emailStore.inbox = emails;
+            
+            return NextResponse.json({
+              success: true,
+              emails,
+              folder: 'inbox',
+              message: `Fetched ${emails.length} emails via IMAP`,
+              debug: result.debug
+            });
+          } else {
+            return NextResponse.json({
+              success: false,
+              error: result.error,
+              emails: [],
+              debug: result.debug
+            });
+          }
+        } else if (usePOP && config?.pop?.host) {
+          if (!config.pop.username || !config.pop.password) {
+            return NextResponse.json({
+              success: false,
+              error: 'POP3 username and password required',
+              emails: []
+            });
+          }
+          
+          const result = await fetchPOP3Emails({
+            host: config.pop.host,
+            port: config.pop.port || 995,
+            username: config.pop.username,
+            password: config.pop.password,
+            tls: config.pop.useSSL !== false
           });
+          
+          if (result.success) {
+            const emails = (result.emails || []).reverse();
+            emailStore.inbox = emails;
+            
+            return NextResponse.json({
+              success: true,
+              emails,
+              folder: 'inbox',
+              message: `Fetched ${emails.length} emails via POP3`,
+              debug: result.debug
+            });
+          } else {
+            return NextResponse.json({
+              success: false,
+              error: result.error,
+              emails: [],
+              debug: result.debug
+            });
+          }
         } else {
           return NextResponse.json({
             success: false,
-            error: result.error,
-            emails: []
+            error: 'Configure IMAP or POP3 settings to fetch emails',
+            emails: [],
+            requiresConfig: true
           });
         }
         

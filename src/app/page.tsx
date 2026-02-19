@@ -13699,21 +13699,27 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   <Mail size={40} className="text-white/90" />
                   <div>
                     <h2 className="text-3xl font-black">Email Center</h2>
-                    <p className="text-white/80 text-sm">Full email client with SMTP/IMAP configuration</p>
-                    <div className="flex items-center gap-4 mt-2">
-                      {safeEmailConfig.imap?.host && (
-                        <span className="flex items-center gap-1.5 text-xs bg-white/20 px-2 py-1 rounded-full">
-                          <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
-                          IMAP: {safeEmailConfig.imap.host}
-                        </span>
-                      )}
+                    <p className="text-white/80 text-sm">Full email client with SMTP/IMAP/POP3 configuration</p>
+                    <div className="flex items-center flex-wrap gap-2 mt-2">
                       {safeEmailConfig.smtp?.host && (
                         <span className="flex items-center gap-1.5 text-xs bg-white/20 px-2 py-1 rounded-full">
                           <span className="w-2 h-2 bg-emerald-400 rounded-full"></span>
                           SMTP: {safeEmailConfig.smtp.host}
                         </span>
                       )}
-                      {!safeEmailConfig.imap?.host && !safeEmailConfig.smtp?.host && (
+                      {safeEmailConfig.imap?.host && (
+                        <span className="flex items-center gap-1.5 text-xs bg-white/20 px-2 py-1 rounded-full">
+                          <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
+                          IMAP: {safeEmailConfig.imap.host}
+                        </span>
+                      )}
+                      {safeEmailConfig.pop?.host && (
+                        <span className="flex items-center gap-1.5 text-xs bg-white/20 px-2 py-1 rounded-full">
+                          <span className="w-2 h-2 bg-purple-400 rounded-full"></span>
+                          POP3: {safeEmailConfig.pop.host}
+                        </span>
+                      )}
+                      {!safeEmailConfig.imap?.host && !safeEmailConfig.smtp?.host && !safeEmailConfig.pop?.host && (
                         <span className="flex items-center gap-1.5 text-xs bg-amber-400/30 px-2 py-1 rounded-full">
                           <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
                           Not configured
@@ -13723,12 +13729,13 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  {safeEmailConfig.imap?.host && (
+                  {(safeEmailConfig.imap?.host || safeEmailConfig.pop?.host) && (
                     <button 
                       onClick={async () => {
                         if (emailFetching) return;
                         setEmailFetching(true);
-                        addToast?.('Fetching emails from IMAP server...', 'info');
+                        const protocol = safeEmailConfig.imap?.host ? 'IMAP' : 'POP3';
+                        addToast?.(`Fetching emails from ${protocol} server...`, 'info');
                         try {
                           const response = await fetch('/api/email/inbox', {
                             method: 'POST',
@@ -13736,7 +13743,8 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                             body: JSON.stringify({
                               action: 'fetch',
                               config: safeEmailConfig,
-                              folder: 'INBOX'
+                              folder: 'INBOX',
+                              protocol: safeEmailConfig.imap?.host ? 'imap' : 'pop'
                             })
                           });
                           const result = await response.json();
@@ -13754,9 +13762,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                                 starred: e.starred
                               }))
                             }));
-                            addToast?.(`✅ Fetched ${result.emails.length} emails`, 'success');
+                            addToast?.(`✅ Fetched ${result.emails.length} emails via ${protocol}`, 'success');
                           } else {
                             addToast?.(`❌ ${result.error || 'Failed to fetch'}`, 'error');
+                            if (result.debug) console.log('Debug:', result.debug);
                           }
                         } catch (e) {
                           addToast?.('❌ Connection failed', 'error');
@@ -14907,6 +14916,81 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       </label>
                     </div>
                   </div>
+                  
+                  {/* POP3 Settings */}
+                  <div className="border-t pt-6">
+                    <h4 className="text-sm font-bold text-slate-700 mb-4">POP3 Settings (Alternative Incoming)</h4>
+                    <p className="text-xs text-slate-500 mb-3">POP3 downloads emails to this device. IMAP is recommended for multi-device access.</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">POP3 Host</label>
+                        <input 
+                          type="text" 
+                          value={safeEmailConfig.pop?.host || ''}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), host: e.target.value }
+                          }))}
+                          placeholder="pop.example.com"
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">POP3 Port</label>
+                        <input 
+                          type="number" 
+                          value={safeEmailConfig.pop?.port || 995}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), port: parseInt(e.target.value) }
+                          }))}
+                          placeholder="995"
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">POP3 Username</label>
+                        <input 
+                          type="text" 
+                          value={safeEmailConfig.pop?.username || ''}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), username: e.target.value }
+                          }))}
+                          placeholder="your@email.com"
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">POP3 Password</label>
+                        <input 
+                          type="password" 
+                          value={safeEmailConfig.pop?.password || ''}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), password: e.target.value }
+                          }))}
+                          placeholder="••••••••"
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        id="pop-ssl"
+                        checked={safeEmailConfig.pop?.useSSL !== false}
+                        onChange={(e) => setEmailConfig(prev => ({
+                          ...prev,
+                          pop: { ...(prev.pop || { host: '', port: 995, username: '', password: '', useSSL: true }), useSSL: e.target.checked }
+                        }))}
+                        className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                      />
+                      <label htmlFor="pop-ssl" className="text-xs text-slate-600">
+                        Use SSL (Port 995). Uncheck for non-SSL (Port 110)
+                      </label>
+                    </div>
+                  </div>
                 </>
               )}
               
@@ -15018,6 +15102,44 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                 className="flex-1 py-3 border border-emerald-200 text-emerald-600 rounded-xl font-bold hover:bg-emerald-50 transition-colors"
               >
                 Test IMAP
+              </button>
+              <button 
+                onClick={async () => {
+                  // Test POP3 connection
+                  if (!safeEmailConfig.pop?.host) {
+                    addToast?.('Please configure POP3 host first', 'error');
+                    return;
+                  }
+                  if (!safeEmailConfig.pop?.username || !safeEmailConfig.pop?.password) {
+                    addToast?.('Please configure POP3 credentials', 'error');
+                    return;
+                  }
+                  
+                  addToast?.('Testing POP3 connection...', 'info');
+                  try {
+                    const response = await fetch('/api/email/inbox', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'test_pop',
+                        config: safeEmailConfig
+                      })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                      addToast?.('✅ POP3 connection successful!', 'success');
+                    } else {
+                      addToast?.(`❌ POP3 failed: ${result.error || 'Unknown error'}`, 'error');
+                    }
+                  } catch (error) {
+                    addToast?.('❌ POP3 test failed', 'error');
+                  }
+                }}
+                className="flex-1 py-3 border border-purple-200 text-purple-600 rounded-xl font-bold hover:bg-purple-50 transition-colors"
+              >
+                Test POP3
               </button>
               <button 
                 onClick={() => {
