@@ -3953,95 +3953,228 @@ interface Log {
 
 // --- HELPER: FALLBACK CONTENT GENERATOR ---
 const generateFallbackContent = (topic: string, type: string, tone: string): string => {
+  // Create unique variations based on topic
+  const timestamp = Date.now();
+  const variation = topic.split('').reduce((a, b) => a + b.charCodeAt(0), 0) % 5;
+  const topicKeyword = topic.split(' ')[0];
+  
+  const intros: Record<string, string[]> = {
+    professional: [
+      `In today's competitive landscape, understanding ${topic} has become essential for business success.`,
+      `Organizations worldwide are recognizing the strategic importance of ${topic} in achieving their objectives.`,
+      `As industries evolve, ${topic} continues to emerge as a critical factor for sustainable growth.`
+    ],
+    casual: [
+      `Let me tell you something about ${topic} — it's more important than you might think!`,
+      `So you want to know about ${topic}? You're in the right place, my friend.`,
+      `Here's the deal with ${topic}: once you understand it, everything changes.`
+    ],
+    technical: [
+      `The technical framework of ${topic} encompasses multiple interconnected components requiring systematic analysis.`,
+      `From an architectural standpoint, ${topic} demands rigorous implementation methodologies.`,
+      `Analyzing ${topic} through empirical data reveals patterns essential for optimization.`
+    ],
+    friendly: [
+      `I'm so glad you're interested in ${topic} — let me share what I've learned!`,
+      `Have you been wondering about ${topic}? Let's explore it together!`,
+      `${topic} is such an important topic, and I'm excited to help you understand it better.`
+    ]
+  };
+
+  const selectedIntro = (intros[tone] || intros.professional)[variation];
+  
   const templates: Record<string, (t: string, tone: string) => string> = {
-    blog: (t, tone) => `# ${t}: A Comprehensive Guide
+    blog: (t, tone) => `# ${t}: A Complete Guide for Success
 
-${tone === 'professional' ? 'In this comprehensive article, we explore the key aspects of' : tone === 'casual' ? "Let's dive into" : `Discover everything you need to know about`} ${t}.
+${selectedIntro}
 
-## Introduction
+## Why ${t} Matters
 
-Understanding ${t} is essential for anyone looking to improve their digital presence. This guide will walk you through the fundamentals and advanced strategies.
+The impact of ${t} extends across multiple areas of business and personal development. Understanding its core principles can transform your approach and deliver measurable results.
 
-## Key Benefits
+### Key Statistics About ${t}
 
-1. **Improved Visibility**: Mastering ${t} helps you stand out in search results.
-2. **Better Engagement**: Quality content around ${t} drives user interaction.
-3. **Long-term Results**: Investing in ${t} provides sustainable growth.
+- 78% of professionals consider ${t} essential for their growth
+- Organizations focusing on ${t} see 2.5x better outcomes
+- Investment in ${t} knowledge pays dividends for years
 
-## Best Practices
+## Understanding the Fundamentals
 
-When implementing ${t} strategies, consider these essential tips:
+Before diving deep into ${t}, let's cover the essential concepts:
 
-- Focus on user intent and search behavior
-- Create comprehensive, valuable content
-- Optimize for both users and search engines
-- Monitor and adjust your approach based on data
+1. **Core Principles**: The foundational elements that make ${t} effective
+2. **Common Applications**: How ${t} is used across different industries
+3. **Success Factors**: What separates top performers in ${t}
+
+## Practical Strategies for ${t}
+
+### Strategy 1: Start with Clear Objectives
+
+Define what success looks like for your ${t} initiatives. Set measurable goals and timelines.
+
+### Strategy 2: Build Your Foundation
+
+Invest time in understanding the basics thoroughly before attempting advanced techniques.
+
+### Strategy 3: Implement Consistently
+
+Regular, focused effort on ${t} yields better results than sporadic intensive pushes.
+
+### Strategy 4: Measure and Optimize
+
+Track your ${t} performance and continuously refine your approach based on data.
+
+## Common ${t} Challenges and Solutions
+
+| Challenge | Solution |
+|-----------|----------|
+| Getting started | Begin with small, manageable steps |
+| Maintaining consistency | Create systems and schedules |
+| Measuring results | Define clear KPIs upfront |
+| Staying motivated | Connect ${t} to your bigger goals |
+
+## Advanced ${t} Techniques
+
+For those ready to take ${t} to the next level:
+
+- Leverage automation and tools
+- Build a network of ${t} practitioners
+- Stay updated with industry trends
+- Experiment with new approaches
+
+## Your ${t} Action Plan
+
+1. **Week 1**: Assess your current ${t} situation
+2. **Week 2**: Define your goals and strategy
+3. **Week 3**: Begin implementation
+4. **Week 4**: Review and adjust
 
 ## Conclusion
 
-${t} remains a crucial element of any successful digital strategy. By following the guidelines in this article, you'll be well-positioned to achieve your goals.
+${t} represents a significant opportunity for growth and improvement. By following this guide and staying committed to your ${t} journey, you'll be well-positioned to achieve lasting success.
 
 ---
 
-*This content was generated by TrafficFlow AI Content Generator*`,
+*Generated by TrafficFlow AI • ${new Date().toLocaleDateString()}*`,
 
-    product: (t, tone) => `**${t}** - Premium Quality Solution
+    product: (t, tone) => `# ${t}
 
-${tone === 'professional' ? 'Elevate your business with our' : 'Discover our'} exceptional ${t} solution, designed to meet your specific needs.
+${selectedIntro}
 
-### Features:
-- Premium quality and reliability
-- Expert-backed methodology
-- Proven results across industries
-- Dedicated support team
+## Product Overview
 
-### Why Choose Us?
-Our ${t} solution stands out for its quality, effectiveness, and customer satisfaction. We've helped hundreds of businesses achieve their goals.
+Our ${t} solution delivers exceptional value through a proven, systematic approach designed for real-world results.
 
-### Pricing:
-Contact us for custom pricing tailored to your needs.
+## Key Features
 
-*Order now and transform your business!*`,
+### 🎯 ${t} Core Framework
+Everything you need to implement ${t} successfully, with step-by-step guidance.
 
-    landing: (t, tone) => `# Transform Your Business with ${t}
+### 📊 Performance Analytics
+Track your ${t} progress with comprehensive dashboards and reports.
 
-${tone === 'professional' ? 'Welcome to the future of' : 'Ready to master'} ${t}? You're in the right place.
+### 🛠️ Ready-to-Use Templates
+Save time with professionally designed ${t} templates and resources.
 
-## What We Offer
+### 💡 Expert Insights
+Access curated knowledge from ${t} practitioners and thought leaders.
 
-✓ Expert guidance on ${t}
-✓ Proven strategies that deliver results
-✓ Personalized approach for your business
-✓ Ongoing support and optimization
+## Benefits
 
-## Our Process
+✅ **Save Time** — Reduce ${t} implementation time by 50%  
+✅ **Better Results** — Achieve measurable improvements in ${t} outcomes  
+✅ **Lower Risk** — Follow a proven ${t} methodology  
+✅ **Ongoing Support** — Get help when you need it
 
-1. **Discovery** - We analyze your current situation
-2. **Strategy** - We develop a custom ${t} plan
-3. **Implementation** - We execute with precision
-4. **Results** - You see measurable improvements
+## What's Included
 
-## Get Started Today
+- Complete ${t} implementation guide
+- Customizable templates
+- Progress tracking tools
+- Expert consultation access
 
-Don't wait to improve your ${t} strategy. Contact us now for a free consultation.
+## Pricing
 
-**[Get Started] [Learn More] [Contact Us]**`,
+Starting at $99/month for the ${t} Essentials package. Enterprise plans available.
 
-    meta: (t, tone) => `${t} - Comprehensive Guide & Expert Tips | Your Brand
+## Get Started
 
-Discover expert insights on ${t}. Learn best practices, strategies, and tips to improve your results. Free consultation available.`,
+Transform your approach to ${t} today. Contact us for a free consultation.
 
-    social: (t, tone) => `🚀 ${t} - The Ultimate Guide!
+**[Start Free Trial] [Schedule Demo] [Contact Sales]**`,
 
-${tone === 'casual' ? "Looking to level up your" : 'Master'} ${t} with our expert tips! 📈
+    landing: (t, tone) => `# Master ${t} Today
 
-✅ Proven strategies
-✅ Easy implementation  
+${selectedIntro}
+
+---
+
+## The Problem
+
+Struggling with ${t}? You're not alone. Most people face these challenges:
+
+❌ Information overload  
+❌ No clear path forward  
+❌ Wasted time and resources  
+❌ Frustrating trial and error
+
+---
+
+## The Solution
+
+Our ${t} system eliminates the confusion and gives you a clear roadmap.
+
+### ✅ Proven Framework
+A step-by-step approach to ${t} that works.
+
+### ✅ Expert Guidance
+Learn from practitioners who've mastered ${t}.
+
+### ✅ Real Results
+Join thousands who've transformed their ${t} outcomes.
+
+---
+
+## How It Works
+
+**Step 1:** Assess your ${t} starting point  
+**Step 2:** Get your custom ${t} roadmap  
+**Step 3:** Implement with guided support  
+**Step 4:** Celebrate your ${t} success
+
+---
+
+## What People Are Saying
+
+> "This ${t} approach changed everything for us." — Satisfied Customer
+
+> "Finally, a ${t} solution that actually delivers." — Business Owner
+
+---
+
+## Ready to Transform Your ${t}?
+
+**[Get Started Now — Free Trial]**
+
+No credit card required. Cancel anytime.
+
+---
+
+*Trusted by 10,000+ ${t} enthusiasts worldwide*`,
+
+    meta: (t, tone) => `${t}: Expert guide with proven strategies and actionable tips. Learn the fundamentals and advanced techniques for ${t} success. Start improving today!`,
+
+    social: (t, tone) => `🚀 ${t} — Everything You Need to Know!
+
+${tone === 'casual' ? "Ready to crush it with" : "Master"} ${t}? Here's what works:
+
+✅ Proven framework
+✅ Step-by-step guide
 ✅ Real results
 
-Click the link to learn more! 👇
+Don't miss out on ${t} success! 👇
 
-#${t.replace(/\s+/g, '')} #DigitalMarketing #SEO #Growth`
+#${topicKeyword.replace(/[^a-zA-Z0-9]/g, '')} #Tips #Success #Growth #Strategy`
   };
 
   return templates[type]?.(topic, tone) || templates.blog(topic, tone);
