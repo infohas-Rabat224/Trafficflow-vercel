@@ -53,73 +53,118 @@ function generateEmailId(): string {
   return `email_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-// Fetch emails via IMAP
+// Fetch emails via IMAP with timeout handling
 async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'): Promise<{ success: boolean; emails?: Email[]; error?: string }> {
   try {
     const Imap = await import('imap').then(m => m.default || m);
     
     return new Promise((resolve) => {
+      // Create timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        resolve({ 
+          success: false, 
+          error: 'Connection timeout - IMAP server did not respond within 15 seconds. Please check your server address, port, and firewall settings.' 
+        });
+      }, 15000);
+      
       const imap = new Imap({
         user: config.username,
         password: config.password,
         host: config.host,
         port: config.port,
         tls: config.tls,
-        tlsOptions: { rejectUnauthorized: false }
+        tlsOptions: { 
+          rejectUnauthorized: false,
+          servername: config.host
+        },
+        connTimeout: 10000,  // 10 second connection timeout
+        authTimeout: 10000   // 10 second auth timeout
       });
       
       const emails: Email[] = [];
+      let resolved = false;
+      
+      const cleanup = () => {
+        clearTimeout(timeout);
+        try { imap.destroy(); } catch (e) { /* ignore */ }
+      };
       
       imap.once('ready', () => {
+        clearTimeout(timeout); // Clear timeout on successful connection
+        
         imap.openBox(folder, false, (err: Error | null, box: any) => {
           if (err) {
-            imap.end();
-            resolve({ success: false, error: err.message });
+            cleanup();
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: false, error: `Failed to open folder: ${err.message}` });
+            }
             return;
           }
           
           if (box.messages.total === 0) {
-            imap.end();
-            resolve({ success: true, emails: [] });
+            cleanup();
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: true, emails: [] });
+            }
             return;
           }
           
-          const fetch = imap.seq.fetch('1:10', {
-            bodies: 'HEADER.FIELDS (FROM TO SUBJECT DATE)',
+          // Fetch last 20 emails
+          const start = Math.max(1, box.messages.total - 19);
+          const fetch = imap.seq.fetch(`${start}:${box.messages.total}`, {
+            bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)', 'TEXT'],
             struct: true
           });
           
           fetch.on('message', (msg: any, seqno: number) => {
-            let email: Partial<Email> = { id: generateEmailId(), read: true, starred: false };
+            let email: Partial<Email> = { id: generateEmailId(), read: true, starred: false, body: '' };
+            let headerBuffer = '';
+            let bodyBuffer = '';
             
             msg.on('body', (stream: any, info: any) => {
-              let buffer = '';
-              stream.on('data', (chunk: string) => buffer += chunk);
+              stream.on('data', (chunk: string) => {
+                if (info.which === 'TEXT') {
+                  bodyBuffer += chunk;
+                } else {
+                  headerBuffer += chunk;
+                }
+              });
               stream.once('end', () => {
-                const fromMatch = buffer.match(/From: (.+)/i);
-                const toMatch = buffer.match(/To: (.+)/i);
-                const subjectMatch = buffer.match(/Subject: (.+)/i);
-                const dateMatch = buffer.match(/Date: (.+)/i);
+                // Parse headers
+                const fromMatch = headerBuffer.match(/From: (.+)/i);
+                const toMatch = headerBuffer.match(/To: (.+)/i);
+                const subjectMatch = headerBuffer.match(/Subject: (.+)/i);
+                const dateMatch = headerBuffer.match(/Date: (.+)/i);
                 
                 if (fromMatch) {
-                  const fromParts = fromMatch[1].match(/(.+) <(.+)>/) || ['', fromMatch[1], fromMatch[1]];
-                  email.from = fromParts[1].replace(/"/g, '').trim();
-                  email.fromEmail = fromParts[2];
+                  const fromParts = fromMatch[1].match(/"?([^"]*)"? ?<(.+)>/) || ['', fromMatch[1].trim(), fromMatch[1].trim()];
+                  email.from = fromParts[1].replace(/"/g, '').trim() || fromMatch[1].trim();
+                  email.fromEmail = fromParts[2] || fromMatch[1].trim();
                 }
                 if (toMatch) email.toEmail = toMatch[1];
-                if (subjectMatch) email.subject = subjectMatch[1];
+                if (subjectMatch) email.subject = subjectMatch[1].trim();
                 if (dateMatch) email.date = dateMatch[1];
+                
+                // Set body (first 500 chars)
+                email.body = bodyBuffer.substring(0, 500);
               });
             });
             
             msg.once('end', () => {
-              emails.push(email as Email);
+              if (email.subject || email.from) {
+                emails.push(email as Email);
+              }
             });
           });
           
           fetch.once('error', (err: Error) => {
-            imap.end();
-            resolve({ success: false, error: err.message });
+            cleanup();
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: false, error: `Fetch error: ${err.message}` });
+            }
           });
           
           fetch.once('end', () => {
@@ -129,11 +174,104 @@ async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'
       });
       
       imap.once('error', (err: Error) => {
-        resolve({ success: false, error: `IMAP connection failed: ${err.message}` });
+        cleanup();
+        if (!resolved) {
+          resolved = true;
+          
+          // Provide helpful error messages
+          let errorMsg = err.message;
+          if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
+            errorMsg = `Cannot connect to IMAP server at ${config.host}:${config.port}. Check server address and port, and ensure firewall allows the connection.`;
+          } else if (errorMsg.includes('Invalid credentials') || errorMsg.includes('Authentication failed')) {
+            errorMsg = 'Authentication failed. Check your username and password.';
+          } else if (errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
+            errorMsg = 'SSL/TLS error. Try toggling the SSL setting or check if the port is correct (993 for SSL, 143 for non-SSL).';
+          }
+          
+          resolve({ success: false, error: `IMAP connection failed: ${errorMsg}` });
+        }
       });
       
       imap.once('end', () => {
-        resolve({ success: true, emails });
+        clearTimeout(timeout);
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: true, emails });
+        }
+      });
+      
+      imap.connect();
+    });
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Test IMAP connection
+async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: boolean; error?: string; message?: string }> {
+  try {
+    const Imap = await import('imap').then(m => m.default || m);
+    
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ 
+          success: false, 
+          error: 'Connection timeout - IMAP server did not respond within 10 seconds' 
+        });
+      }, 10000);
+      
+      const imap = new Imap({
+        user: config.username,
+        password: config.password,
+        host: config.host,
+        port: config.port,
+        tls: config.tls,
+        tlsOptions: { 
+          rejectUnauthorized: false,
+          servername: config.host
+        },
+        connTimeout: 8000,
+        authTimeout: 8000
+      });
+      
+      let resolved = false;
+      
+      imap.once('ready', () => {
+        clearTimeout(timeout);
+        imap.end();
+        if (!resolved) {
+          resolved = true;
+          resolve({ 
+            success: true, 
+            message: `Successfully connected to IMAP server at ${config.host}:${config.port}` 
+          });
+        }
+      });
+      
+      imap.once('error', (err: Error) => {
+        clearTimeout(timeout);
+        if (!resolved) {
+          resolved = true;
+          
+          let errorMsg = err.message;
+          if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
+            errorMsg = `Cannot connect to ${config.host}:${config.port}. Check server address and port.`;
+          } else if (errorMsg.includes('Invalid credentials') || errorMsg.includes('Authentication failed')) {
+            errorMsg = 'Authentication failed. Check username and password.';
+          } else if (errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
+            errorMsg = 'SSL/TLS error. Try toggling SSL or check port (993 for SSL, 143 for non-SSL).';
+          }
+          
+          resolve({ success: false, error: errorMsg });
+        }
+      });
+      
+      imap.once('end', () => {
+        clearTimeout(timeout);
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: true, message: 'Connection test successful' });
+        }
       });
       
       imap.connect();
@@ -149,6 +287,37 @@ export async function POST(request: NextRequest) {
     const { action, config, emailId, folder, email, targetFolder } = body;
     
     switch (action) {
+      case 'test_imap':
+        // Validate IMAP config
+        if (!config?.imap?.host) {
+          return NextResponse.json({
+            success: false,
+            error: 'IMAP host is required'
+          });
+        }
+        if (!config?.imap?.username) {
+          return NextResponse.json({
+            success: false,
+            error: 'IMAP username is required'
+          });
+        }
+        if (!config?.imap?.password) {
+          return NextResponse.json({
+            success: false,
+            error: 'IMAP password is required'
+          });
+        }
+        
+        const testResult = await testIMAPConnection({
+          host: config.imap.host,
+          port: config.imap.port || 993,
+          username: config.imap.username,
+          password: config.imap.password,
+          tls: config.imap.useSSL !== false // Default to true
+        });
+        
+        return NextResponse.json(testResult);
+        
       case 'fetch':
         if (!config?.imap?.host || !config?.imap?.username || !config?.imap?.password) {
           return NextResponse.json({
@@ -159,7 +328,13 @@ export async function POST(request: NextRequest) {
           });
         }
         
-        const result = await fetchIMAPEmails(config.imap, folder || 'INBOX');
+        const result = await fetchIMAPEmails({
+          host: config.imap.host,
+          port: config.imap.port || 993,
+          username: config.imap.username,
+          password: config.imap.password,
+          tls: config.imap.useSSL !== false
+        }, folder || 'INBOX');
         
         if (result.success) {
           const target = folder === 'INBOX' ? 'inbox' : folder?.toLowerCase() || 'inbox';

@@ -14810,6 +14810,21 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         />
                       </div>
                     </div>
+                    <div className="mt-4 flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        id="imap-ssl"
+                        checked={safeEmailConfig.imap?.useSSL !== false}
+                        onChange={(e) => setEmailConfig(prev => ({
+                          ...prev,
+                          imap: { ...(prev.imap || { host: '', port: 993, username: '', password: '', useSSL: true }), useSSL: e.target.checked }
+                        }))}
+                        className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                      />
+                      <label htmlFor="imap-ssl" className="text-xs text-slate-600">
+                        Use SSL (Port 993). Uncheck for non-SSL (Port 143)
+                      </label>
+                    </div>
                   </div>
                 </>
               )}
@@ -14851,7 +14866,8 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
               </button>
               <button 
                 onClick={async () => {
-                  // Test the email configuration
+                  // Test SMTP connection
+                  addToast?.('Testing SMTP connection...', 'info');
                   try {
                     const response = await fetch('/api/email/send', {
                       method: 'POST',
@@ -14872,17 +14888,55 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                     const result = await response.json();
                     
                     if (result.success) {
-                      addToast?.('✅ Email connection test successful!', 'success');
+                      addToast?.('✅ SMTP connection successful!', 'success');
                     } else {
-                      addToast?.(`❌ Connection failed: ${result.error || 'Unknown error'}`, 'error');
+                      addToast?.(`❌ SMTP failed: ${result.error || 'Unknown error'}`, 'error');
                     }
                   } catch (error) {
-                    addToast?.('❌ Failed to test email connection', 'error');
+                    addToast?.('❌ SMTP test failed', 'error');
+                  }
+                }}
+                className="flex-1 py-3 border border-blue-200 text-blue-600 rounded-xl font-bold hover:bg-blue-50 transition-colors"
+              >
+                Test SMTP
+              </button>
+              <button 
+                onClick={async () => {
+                  // Test IMAP connection
+                  if (!safeEmailConfig.imap?.host) {
+                    addToast?.('Please configure IMAP host first', 'error');
+                    return;
+                  }
+                  if (!safeEmailConfig.imap?.username || !safeEmailConfig.imap?.password) {
+                    addToast?.('Please configure IMAP credentials', 'error');
+                    return;
+                  }
+                  
+                  addToast?.('Testing IMAP connection...', 'info');
+                  try {
+                    const response = await fetch('/api/email/inbox', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'test_imap',
+                        config: safeEmailConfig
+                      })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                      addToast?.('✅ IMAP connection successful!', 'success');
+                    } else {
+                      addToast?.(`❌ IMAP failed: ${result.error || 'Unknown error'}`, 'error');
+                    }
+                  } catch (error) {
+                    addToast?.('❌ IMAP test failed', 'error');
                   }
                 }}
                 className="flex-1 py-3 border border-emerald-200 text-emerald-600 rounded-xl font-bold hover:bg-emerald-50 transition-colors"
               >
-                Test Connection
+                Test IMAP
               </button>
               <button 
                 onClick={() => {
@@ -14891,7 +14945,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                 }}
                 className="flex-1 py-3 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 transition-colors"
               >
-                Save Configuration
+                Save
               </button>
             </div>
           </div>
