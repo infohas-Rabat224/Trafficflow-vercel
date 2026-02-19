@@ -339,6 +339,7 @@ async function fetchIMAPEmails(config: IMAPEmailConfig, folder: string = 'INBOX'
 }
 
 // Fetch emails via POP3 - Complete rewrite for reliability
+// Supports: SSL (implicit TLS on any port), TLS (StartTLS via STLS command), None (plain text)
 async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: boolean; emails?: Email[]; error?: string; debug?: string }> {
   const debugLog: string[] = [`Starting POP3 fetch to ${config.host}:${config.port} (Encryption: ${config.encryption})`];
   
@@ -354,6 +355,7 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
     let emailList: { num: number; size: number }[] = [];
     let currentEmailData = '';
     let currentEmailIndex = 0;
+    let startTLSUpgradePending = false;
     
     const cleanup = () => {
       if (socket) {
@@ -382,6 +384,54 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
       }
     };
     
+    const upgradeToTLS = () => {
+      debugLog.push('Upgrading to TLS (StartTLS)');
+      
+      // Remove old listeners
+      socket.removeAllListeners('data');
+      socket.removeAllListeners('error');
+      socket.removeAllListeners('close');
+      
+      // Upgrade to TLS
+      const tlsSocket = tls.connect({
+        socket: socket,
+        rejectUnauthorized: false,
+        servername: config.host
+      }, () => {
+        debugLog.push('TLS upgrade successful');
+        socket = tlsSocket;
+        
+        // Re-attach listeners
+        tlsSocket.on('data', (data: Buffer) => {
+          if (!resolved) {
+            processResponse(data.toString());
+          }
+        });
+        
+        tlsSocket.on('error', (err: Error) => handleError(err));
+        
+        tlsSocket.on('close', () => {
+          debugLog.push('TLS socket closed');
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeout);
+            resolve({ success: true, emails, debug: debugLog.join('\n') });
+          }
+        });
+        
+        // Continue with authentication
+        currentStep = 'user';
+        sendCmd(`USER ${config.username}`);
+      });
+      
+      tlsSocket.on('error', (err: Error) => {
+        debugLog.push(`TLS upgrade failed: ${err.message}`);
+        handleError(err);
+      });
+      
+      socket = tlsSocket;
+    };
+    
     const processResponse = (response: string) => {
       debugLog.push(`<<< ${response.substring(0, 300)}${response.length > 300 ? '...' : ''}`);
       
@@ -403,13 +453,33 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
       if (currentStep === 'greeting') {
         if (line.startsWith('+OK')) {
           debugLog.push('Server greeting received');
-          currentStep = 'user';
-          sendCmd(`USER ${config.username}`);
+          
+          // For StartTLS mode, send STLS command first
+          if (config.encryption === 'tls') {
+            debugLog.push('StartTLS mode: sending STLS command');
+            currentStep = 'stls';
+            sendCmd('STLS');
+          } else {
+            currentStep = 'user';
+            sendCmd(`USER ${config.username}`);
+          }
         } else {
           resolved = true;
           clearTimeout(timeout);
           cleanup();
           resolve({ success: false, error: `Server greeting failed: ${line}`, debug: debugLog.join('\n') });
+        }
+      } else if (currentStep === 'stls') {
+        // Response to STLS command
+        if (line.startsWith('+OK')) {
+          debugLog.push('STLS accepted, upgrading connection');
+          startTLSUpgradePending = true;
+          upgradeToTLS();
+        } else {
+          // Server doesn't support STLS, try plain auth
+          debugLog.push(`STLS not supported: ${line}, continuing without TLS`);
+          currentStep = 'user';
+          sendCmd(`USER ${config.username}`);
         }
       } else if (currentStep === 'user') {
         if (line.startsWith('+OK')) {
@@ -542,7 +612,7 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
         if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
           errorMsg = `Cannot connect to ${config.host}:${config.port}. Check server address and port.`;
         } else if (errorMsg.includes('EPROTO') || errorMsg.includes('wrong version number')) {
-          errorMsg = `SSL/TLS mismatch. If using port 110, uncheck SSL. If using port 995, check SSL.`;
+          errorMsg = `SSL/TLS mismatch. Try changing encryption setting. SSL = implicit TLS, TLS = StartTLS, None = plain text.`;
         }
         
         resolve({ success: false, error: errorMsg, debug: debugLog.join('\n') });
@@ -554,21 +624,21 @@ async function fetchPOP3Emails(config: POP3EmailConfig): Promise<{ success: bool
     };
     
     // Create socket based on encryption setting
-    // SSL = Implicit TLS on connect (port 995)
-    // TLS = StartTLS (would need STLS command, but most servers use implicit SSL for POP3)
-    // None = Plain text connection (port 110)
+    // SSL = Implicit TLS on connect (secure from the start, works on any port)
+    // TLS = StartTLS (connect plain, then upgrade via STLS command)
+    // None = Plain text connection (no encryption)
     if (config.encryption === 'ssl') {
-      debugLog.push('Creating TLS socket (SSL)');
+      debugLog.push('Creating TLS socket (Implicit SSL - secure from start)');
       socket = tls.connect({
         host: config.host,
         port: config.port,
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        servername: config.host
       }, handleConnect);
     } else {
-      // TLS (StartTLS) or None - use plain TCP
-      // Note: For POP3 StartTLS, client connects plain then sends STLS command
-      // But most POP3 servers use implicit SSL on port 995
-      debugLog.push(`Creating plain TCP socket (${config.encryption})`);
+      // TLS (StartTLS) or None - start with plain TCP
+      // For StartTLS, we'll upgrade after STLS command
+      debugLog.push(`Creating plain TCP socket (${config.encryption}${config.encryption === 'tls' ? ' - will upgrade via STLS' : ''})`);
       socket = net.connect({
         host: config.host,
         port: config.port
@@ -679,6 +749,7 @@ async function testIMAPConnection(config: IMAPEmailConfig): Promise<{ success: b
 }
 
 // Test POP3 connection
+// Supports: SSL (implicit TLS on any port), TLS (StartTLS via STLS command), None (plain text)
 async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
     const net = await import('net');
@@ -694,68 +765,80 @@ async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: b
       
       let socket: any;
       let resolved = false;
-      let dataBuffer = '';
+      let currentStep = 'greeting';
       
-      const processLine = (line: string) => {
-        if (line.startsWith('+OK')) {
-          // Check which step we're at
-          if (!dataBuffer.includes('USER')) {
-            // Greeting received, send USER
-            socket.write(`USER ${config.username}\r\n`);
-            dataBuffer += 'USER';
-          } else if (dataBuffer.includes('USER') && !dataBuffer.includes('PASS')) {
-            // USER OK, send PASS
-            socket.write(`PASS ${config.password}\r\n`);
-            dataBuffer += 'PASS';
-          } else if (dataBuffer.includes('PASS')) {
-            // Authentication successful
-            socket.write('QUIT\r\n');
-            clearTimeout(timeout);
-            if (!resolved) {
-              resolved = true;
-              resolve({ 
-                success: true, 
-                message: `✅ Connected to POP3 server ${config.host}:${config.port}` 
-              });
+      const upgradeToTLS = () => {
+        socket.removeAllListeners('data');
+        socket.removeAllListeners('error');
+        
+        const tlsSocket = tls.connect({
+          socket: socket,
+          rejectUnauthorized: false,
+          servername: config.host
+        }, () => {
+          socket = tlsSocket;
+          currentStep = 'user';
+          socket.write(`USER ${config.username}\r\n`);
+          
+          tlsSocket.on('data', (data: Buffer) => {
+            handleData(data.toString());
+          });
+          tlsSocket.on('error', (err: Error) => handleError(err));
+        });
+        
+        socket = tlsSocket;
+      };
+      
+      const handleData = (response: string) => {
+        const lines = response.split('\r\n');
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          if (line.startsWith('+OK')) {
+            if (currentStep === 'greeting') {
+              if (config.encryption === 'tls') {
+                // Send STLS for StartTLS
+                currentStep = 'stls';
+                socket.write('STLS\r\n');
+              } else {
+                currentStep = 'user';
+                socket.write(`USER ${config.username}\r\n`);
+              }
+            } else if (currentStep === 'stls') {
+              // STLS accepted, upgrade to TLS
+              upgradeToTLS();
+            } else if (currentStep === 'user') {
+              currentStep = 'pass';
+              socket.write(`PASS ${config.password}\r\n`);
+            } else if (currentStep === 'pass') {
+              // Success!
+              socket.write('QUIT\r\n');
+              clearTimeout(timeout);
+              if (!resolved) {
+                resolved = true;
+                resolve({ 
+                  success: true, 
+                  message: `✅ Connected to POP3 server ${config.host}:${config.port}` 
+                });
+              }
             }
-          }
-        } else if (line.startsWith('-ERR')) {
-          clearTimeout(timeout);
-          if (!resolved) {
-            resolved = true;
-            resolve({ success: false, error: `Server error: ${line}` });
+          } else if (line.startsWith('-ERR')) {
+            if (currentStep === 'stls') {
+              // STLS not supported, continue plain
+              currentStep = 'user';
+              socket.write(`USER ${config.username}\r\n`);
+            } else {
+              clearTimeout(timeout);
+              if (!resolved) {
+                resolved = true;
+                resolve({ success: false, error: `Server error: ${line}` });
+              }
+            }
           }
         }
       };
       
-      // Create socket based on encryption setting
-      // SSL = Implicit TLS (port 995)
-      // TLS/None = Plain TCP (port 110)
-      if (config.encryption === 'ssl') {
-        socket = tls.connect({
-          host: config.host,
-          port: config.port,
-          rejectUnauthorized: false
-        });
-      } else {
-        // TLS (StartTLS) or None - use plain TCP
-        socket = net.connect({
-          host: config.host,
-          port: config.port
-        });
-      }
-      
-      socket.on('data', (data: Buffer) => {
-        const response = data.toString();
-        const lines = response.split('\r\n');
-        lines.forEach(line => {
-          if (line.trim()) {
-            processLine(line);
-          }
-        });
-      });
-      
-      socket.on('error', (err: Error) => {
+      const handleError = (err: Error) => {
         clearTimeout(timeout);
         if (!resolved) {
           resolved = true;
@@ -763,11 +846,33 @@ async function testPOP3Connection(config: POP3EmailConfig): Promise<{ success: b
           if (errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNREFUSED')) {
             errorMsg = `Cannot connect to ${config.host}:${config.port}. Check server address and port.`;
           } else if (errorMsg.includes('EPROTO') || errorMsg.includes('wrong version number')) {
-            errorMsg = `SSL/TLS mismatch. If using port 110, uncheck SSL. If using port 995, check SSL.`;
+            errorMsg = `SSL/TLS mismatch. Try changing encryption setting. SSL = implicit TLS, TLS = StartTLS, None = plain text.`;
           }
           resolve({ success: false, error: errorMsg });
         }
-      });
+      };
+      
+      // Create socket based on encryption setting
+      // SSL = Implicit TLS on connect (secure from the start, works on any port)
+      // TLS = StartTLS (connect plain, then upgrade via STLS command)
+      // None = Plain text connection (no encryption)
+      if (config.encryption === 'ssl') {
+        socket = tls.connect({
+          host: config.host,
+          port: config.port,
+          rejectUnauthorized: false,
+          servername: config.host
+        });
+      } else {
+        // TLS (StartTLS) or None - start with plain TCP
+        socket = net.connect({
+          host: config.host,
+          port: config.port
+        });
+      }
+      
+      socket.on('data', (data: Buffer) => handleData(data.toString()));
+      socket.on('error', (err: Error) => handleError(err));
       
       socket.setTimeout(12000);
     });

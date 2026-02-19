@@ -14909,8 +14909,8 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           }))}
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         >
-                          <option value="ssl">SSL (Port 993)</option>
-                          <option value="tls">TLS/StartTLS (Port 143)</option>
+                          <option value="ssl">SSL (Implicit TLS)</option>
+                          <option value="tls">TLS/StartTLS</option>
                           <option value="none">None (Plain Text)</option>
                         </select>
                       </div>
@@ -14984,9 +14984,9 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           }))}
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         >
-                          <option value="ssl">SSL (Port 995)</option>
-                          <option value="tls">TLS/StartTLS (Port 110)</option>
-                          <option value="none">None/Plain Text (Port 110)</option>
+                          <option value="ssl">SSL (Implicit TLS)</option>
+                          <option value="tls">TLS/StartTLS</option>
+                          <option value="none">None (Plain Text)</option>
                         </select>
                       </div>
                     </div>
