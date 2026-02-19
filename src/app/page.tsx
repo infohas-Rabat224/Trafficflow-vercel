@@ -4652,6 +4652,10 @@ const MainContent = () => {
     scrollDepthAvg: 0
   });
   
+  // SEO Loading States
+  const [seoLoading, setSeoLoading] = useState(false);
+  const [snippetLoading, setSnippetLoading] = useState(false);
+  
   // Bot Risk Indicator
   const [botRiskLevel, setBotRiskLevel] = useState<'low' | 'medium' | 'high'>('low');
   const [riskFactors, setRiskFactors] = useState<string[]>([]);
@@ -6894,148 +6898,132 @@ const MainContent = () => {
   };
 
   // --- FEATURED SNIPPET ANALYZER ---
-  const analyzeSnippetOpportunity = () => {
+  const analyzeSnippetOpportunity = async () => {
     if (!snippetKeyword.trim()) {
       addToast?.("Please enter a keyword to analyze", "error");
       return;
     }
     
-    const keyword = snippetKeyword.trim().toLowerCase();
-    const hasQuestion = /^(how|what|why|when|where|who|which|can|does|is|are|do)/i.test(keyword);
-    const hasListIntent = /(best|top|list|steps|ways|tips|types)/i.test(keyword);
-    const hasComparison = /(vs|versus|difference|compare|better)/i.test(keyword);
+    setSnippetLoading(true);
     
-    let recommendedType = 'paragraph';
-    let potential = 'medium';
-    let template = '';
-    
-    if (hasQuestion) {
-      potential = 'high';
-      recommendedType = 'paragraph';
-      template = `${snippetKeyword}?\n\n[Direct Answer: Provide a clear, concise answer in 40-60 words. Start with the most important information.]\n\nFor example: "${snippetKeyword} is [definition]. This occurs when [context]. The main benefit is [benefit]."`;
-    } else if (hasListIntent) {
-      potential = 'high';
-      recommendedType = 'list';
-      template = `${snippetKeyword}\n\n1. [First item with brief description]\n2. [Second item with brief description]\n3. [Third item with brief description]\n4. [Fourth item with brief description]\n5. [Fifth item with brief description]\n\nTip: Use parallel structure and start each item with action verbs.`;
-    } else if (hasComparison) {
-      potential = 'high';
-      recommendedType = 'table';
-      template = `${snippetKeyword}\n\n| Feature | Option A | Option B |\n|---------|----------|----------|\n| Price | $XX | $YY |\n| Quality | High | Medium |\n| Speed | Fast | Moderate |\n| Support | 24/7 | Business hours |\n\nTip: Include key comparison points that matter to users.`;
+    try {
+      const response = await fetch('/api/seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'analyze_snippet',
+          keyword: snippetKeyword.trim()
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.snippetAnalysis) {
+        setSnippetAnalysis(data.snippetAnalysis);
+        addToast?.(`Snippet analysis complete for "${snippetKeyword}"`, "success");
+      } else {
+        throw new Error(data.error || 'Analysis failed');
+      }
+    } catch (error) {
+      console.error('Snippet analysis error:', error);
+      
+      // Fallback analysis
+      const keyword = snippetKeyword.trim().toLowerCase();
+      const hasQuestion = /^(how|what|why|when|where|who|which|can|does|is|are|do)/i.test(keyword);
+      const hasListIntent = /(best|top|list|steps|ways|tips|types)/i.test(keyword);
+      const hasComparison = /(vs|versus|difference|compare|better)/i.test(keyword);
+      
+      let recommendedType = 'Paragraph';
+      let potential = 'medium';
+      let template = '';
+      
+      if (hasQuestion) {
+        potential = 'high';
+        recommendedType = 'Paragraph';
+        template = `${snippetKeyword}?\n\n[Direct Answer: Provide a clear, concise answer in 40-60 words.]\n\nExample: "${snippetKeyword}" refers to [definition]. This involves [explanation].`;
+      } else if (hasListIntent) {
+        potential = 'high';
+        recommendedType = 'List';
+        template = `${snippetKeyword}\n\n1. [First item]\n2. [Second item]\n3. [Third item]\n4. [Fourth item]\n5. [Fifth item]`;
+      } else if (hasComparison) {
+        potential = 'high';
+        recommendedType = 'Table';
+        template = `${snippetKeyword}\n\n| Feature | Option A | Option B |\n|---------|----------|----------|\n| Price | $XX | $YY |\n| Quality | High | Medium |`;
+      }
+      
+      setSnippetAnalysis({
+        potential,
+        recommendedType,
+        optimizations: [
+          `Use "${keyword}" in heading`,
+          'Provide direct answer in first 50-60 words',
+          'Add FAQ schema markup'
+        ],
+        template
+      });
     }
     
-    const optimizations = [
-      `Use "${keyword}" in your H1 or H2 heading`,
-      `Provide direct answer in first 50-60 words`,
-      `Add ${recommendedType === 'paragraph' ? 'FAQ' : recommendedType === 'list' ? 'HowTo' : 'Table'} schema markup`,
-      `Keep content concise and scannable`,
-      `Include relevant keywords naturally`,
-      `Optimize meta description to match query intent`
-    ];
-    
-    setSnippetAnalysis({
-      potential,
-      recommendedType,
-      optimizations,
-      template
-    });
-    
-    addToast?.(`Snippet analysis complete for "${snippetKeyword}"`, "success");
+    setSnippetLoading(false);
   };
 
   // --- COMPETITOR GAP ANALYZER ---
-  const analyzeCompetitorGaps = () => {
-    // Use selectedDomain or first campaign domain
-    const domain = selectedDomain || (() => {
-      const urls = campaigns.flatMap(c => c.urls || []);
-      if (urls.length > 0) {
-        try {
-          return new URL(urls[0]).hostname.replace('www.', '');
-        } catch { return 'example.com'; }
-      }
-      return 'example.com';
-    })();
-
-    // Filter campaigns by selected domain
-    const filteredCampaigns = selectedDomain
-      ? campaigns.filter(c => {
-          const urls = c.urls || [];
-          return urls.some(url => {
-            try {
-              const urlObj = new URL(url);
-              return urlObj.hostname.replace('www.', '') === selectedDomain;
-            } catch { return false; }
-          });
+  const analyzeCompetitorGaps = async () => {
+    const domain = selectedDomain || allDomains[0] || '';
+    
+    if (!domain) {
+      addToast?.('Please select a domain first', 'error');
+      return;
+    }
+    
+    setSeoLoading(true);
+    
+    try {
+      const response = await fetch('/api/seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'analyze_competitor_gaps',
+          domain: domain
         })
-      : campaigns;
-
-    const totalHits = filteredCampaigns.reduce((sum, c) => sum + (c.stats?.hits || 0), 0);
-    const activeCampaigns = filteredCampaigns.filter(c => c.status === 'active').length;
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setKeywordGaps(data.keywordGaps || []);
+        setBacklinkGaps(data.backlinkGaps || []);
+        setContentGaps(data.contentGaps || []);
+        setAnchorDistribution(data.anchorDistribution || []);
+        setBrandQueryData(data.brandQueryData || []);
+        setBacklinkVelocity(data.backlinkVelocity || { daily: 0, weekly: 0, monthly: 0, riskLevel: 'low' });
+        addToast?.(`Competitor gap analysis complete for ${domain}!`, "success");
+      } else {
+        throw new Error(data.error || 'Analysis failed');
+      }
+    } catch (error) {
+      console.error('SEO analysis error:', error);
+      // Fallback data based on domain
+      const domainKeyword = domain.split('.')[0];
+      setKeywordGaps([
+        { keyword: `best ${domainKeyword} tools 2024`, volume: 8500, difficulty: 35, opportunity: 'high' },
+        { keyword: `how to use ${domainKeyword}`, volume: 6200, difficulty: 28, opportunity: 'high' },
+        { keyword: `${domainKeyword} guide for beginners`, volume: 4800, difficulty: 32, opportunity: 'medium' },
+        { keyword: `${domainKeyword} strategies`, volume: 3900, difficulty: 30, opportunity: 'medium' },
+      ]);
+      setBacklinkGaps([
+        { domain: `${domainKeyword}blog.com`, da: 75, type: 'Guest Post', priority: 'high' },
+        { domain: `technews.com`, da: 85, type: 'News Mention', priority: 'high' },
+        { domain: `${domainKeyword}hub.io`, da: 72, type: 'Resource Link', priority: 'medium' },
+      ]);
+      setContentGaps([
+        { topic: `Complete Guide to ${domainKeyword}`, competitorRank: 1, searchVolume: 4500 },
+        { topic: `${domainKeyword} vs Competitors`, competitorRank: 2, searchVolume: 3800 },
+        { topic: `${domainKeyword} Best Practices`, competitorRank: 3, searchVolume: 2900 },
+      ]);
+      addToast?.('Using fallback data', 'info');
+    }
     
-    // Generate domain-specific keyword gaps based on domain keywords
-    const domainKeywords = [...new Set(filteredCampaigns.flatMap(c => c.keywords || []))];
-    const baseKeywords = domainKeywords.length > 0 ? domainKeywords : ['seo', 'marketing', 'traffic'];
-    
-    // Create keyword gaps based on domain and campaign data
-    const keywordGapData = baseKeywords.slice(0, 4).flatMap((kw, i) => [
-      { keyword: `best ${kw} tools 2024`, volume: Math.floor(5000 + totalHits * 0.5 + i * 1000), difficulty: 30 + i * 5, opportunity: i % 2 === 0 ? 'high' : 'medium' },
-      { keyword: `how to improve ${kw}`, volume: Math.floor(3000 + totalHits * 0.3 + i * 800), difficulty: 25 + i * 4, opportunity: 'high' },
-      { keyword: `${kw} strategies guide`, volume: Math.floor(2000 + totalHits * 0.2), difficulty: 35 + i * 3, opportunity: 'medium' },
-    ]).slice(0, 12);
-    
-    // Generate domain-specific backlink gaps
-    const industries = ['technology', 'business', 'marketing', 'finance', 'health', 'education'];
-    const industryIndex = domain.length % industries.length;
-    
-    const backlinkGapData = [
-      { domain: `${domain.split('.')[0]}blog.com`, da: 75 + (domain.length % 20), type: 'Guest Post', priority: 'high' },
-      { domain: `${industries[industryIndex]}news.com`, da: 85 + (domain.length % 10), type: 'News Mention', priority: 'high' },
-      { domain: `${industries[(industryIndex + 1) % industries.length]}hub.com`, da: 80 + (domain.length % 15), type: 'Resource Link', priority: 'medium' },
-      { domain: `top${industries[industryIndex]}sites.com`, da: 70 + (domain.length % 25), type: 'Directory', priority: 'medium' },
-      { domain: `${industries[(industryIndex + 2) % industries.length]}weekly.com`, da: 75 + activeCampaigns, type: 'Guest Post', priority: 'high' },
-      { domain: `digital${industries[industryIndex]}.com`, da: 65 + Math.floor(totalHits / 100), type: 'Partner', priority: 'medium' },
-      { domain: `${domain.split('.')[0]}insider.com`, da: 60 + activeCampaigns * 2, type: 'Interview', priority: 'low' },
-      { domain: `${industries[(industryIndex + 3) % industries.length]}times.com`, da: 88 - (domain.length % 10), type: 'News', priority: 'high' },
-    ];
-    
-    // Generate domain-specific content gaps
-    const contentGapData = [
-      { topic: `Complete Guide to ${domain.split('.')[0]} Services`, competitorRank: 1, searchVolume: Math.floor(3000 + totalHits * 0.3) },
-      { topic: `How ${domain.split('.')[0]} Compares to Competitors`, competitorRank: 2, searchVolume: Math.floor(2500 + totalHits * 0.2) },
-      { topic: `${industries[industryIndex].charAt(0).toUpperCase() + industries[industryIndex].slice(1)} Trends 2024`, competitorRank: 3, searchVolume: Math.floor(4000 + activeCampaigns * 200) },
-      { topic: `Best Practices for ${industries[industryIndex]}`, competitorRank: 1, searchVolume: Math.floor(3500 + totalHits * 0.15) },
-      { topic: `${domain.split('.')[0]} Case Studies`, competitorRank: 2, searchVolume: Math.floor(1800 + activeCampaigns * 150) },
-      { topic: `Expert ${industries[industryIndex]} Tips`, competitorRank: 4, searchVolume: Math.floor(2200 + totalHits * 0.1) },
-    ];
-    
-    setKeywordGaps(keywordGapData);
-    setBacklinkGaps(backlinkGapData);
-    setContentGaps(contentGapData);
-    
-    // Also update anchor distribution and brand query data based on domain
-    setAnchorDistribution([
-      { type: 'Branded', percentage: 35 + (domain.length % 15), count: Math.floor(totalHits * 0.4) },
-      { type: 'Naked URL', percentage: 25 - (domain.length % 10), count: Math.floor(totalHits * 0.25) },
-      { type: 'Partial Match', percentage: 20 + (activeCampaigns % 10), count: Math.floor(totalHits * 0.2) },
-      { type: 'Exact Match', percentage: 10 - (domain.length % 5), count: Math.floor(totalHits * 0.1) },
-      { type: 'Generic', percentage: 10, count: Math.floor(totalHits * 0.05) },
-    ]);
-    
-    setBrandQueryData([
-      { query: domain, volume: Math.floor(1000 + totalHits * 0.5), trend: '↑' },
-      { query: `${domain.split('.')[0]} reviews`, volume: Math.floor(500 + totalHits * 0.2), trend: '↑' },
-      { query: `${domain.split('.')[0]} official`, volume: Math.floor(300 + activeCampaigns * 50), trend: '→' },
-      { query: `is ${domain.split('.')[0]} legit`, volume: Math.floor(200 + totalHits * 0.05), trend: '↑' },
-    ]);
-    
-    // Update backlink velocity based on domain activity
-    setBacklinkVelocity({
-      daily: Math.max(1, Math.floor(activeCampaigns * 0.5 + totalHits * 0.01)),
-      weekly: Math.max(5, Math.floor(activeCampaigns * 3 + totalHits * 0.05)),
-      monthly: Math.max(20, Math.floor(activeCampaigns * 12 + totalHits * 0.2)),
-      riskLevel: activeCampaigns > 10 ? 'medium' : 'low'
-    });
-    
-    addToast?.(`Competitor gap analysis complete for ${domain}!`, "success");
+    setSeoLoading(false);
   };
 
   // --- SEO REPORT GENERATOR ---
@@ -8547,9 +8535,11 @@ End of Report
                       />
                       <button
                         onClick={analyzeSnippetOpportunity}
-                        className="px-4 py-2 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors"
+                        disabled={snippetLoading}
+                        className="px-4 py-2 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                       >
-                        Analyze
+                        {snippetLoading ? <RefreshCw size={12} className="animate-spin" /> : null}
+                        {snippetLoading ? 'Analyzing...' : 'Analyze'}
                       </button>
                     </div>
                   </div>
@@ -8612,9 +8602,11 @@ End of Report
                 </h3>
                 <button
                   onClick={analyzeCompetitorGaps}
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2"
+                  disabled={seoLoading}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <RefreshCw size={14} /> Analyze Gaps
+                  {seoLoading ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />} 
+                  {seoLoading ? 'Analyzing...' : 'Analyze Gaps'}
                 </button>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
