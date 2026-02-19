@@ -21,7 +21,7 @@ import {
   Star, StopCircle, Sunrise, Sunset, Table, Tablet, ThumbsDown, 
   ThumbsUp, Ticket, ToggleLeft, ToggleRight, TreePine, Umbrella, Usb, 
   Video, Voicemail, Volume2, Wallet, Watch, Waves, Webcam, Wifi, WifiOff, Wind, Wine, Wrench, 
-  Youtube, ZoomIn, ZoomOut, Webhook, History, ShieldX
+  Youtube, ZoomIn, ZoomOut, Webhook, History, ShieldX, RotateCcw
 } from 'lucide-react';
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { 
@@ -4771,6 +4771,7 @@ const MainContent = () => {
   // ===== EMAIL CENTER STATE =====
   const [emailConfig, setEmailConfig] = usePersistentState<{
     smtp: { host: string; port: number; username: string; password: string; encryption: 'ssl' | 'tls' | 'none' };
+    imap: { host: string; port: number; username: string; password: string; useSSL: boolean };
     pop: { host: string; port: number; username: string; password: string; useSSL: boolean };
     provider: 'custom' | 'gmail' | 'outlook' | 'sendgrid' | 'brevo';
     sendgridApiKey: string;
@@ -4779,6 +4780,7 @@ const MainContent = () => {
     fromName: string;
   }>('tf_email_config', {
     smtp: { host: '', port: 587, username: '', password: '', encryption: 'tls' },
+    imap: { host: '', port: 993, username: '', password: '', useSSL: true },
     pop: { host: '', port: 995, username: '', password: '', useSSL: true },
     provider: 'custom',
     sendgridApiKey: '',
@@ -4794,14 +4796,8 @@ const MainContent = () => {
     spam: { id: string; from: string; fromEmail: string; subject: string; body: string; date: string }[];
     trash: { id: string; from: string; fromEmail: string; subject: string; body: string; date: string; originalFolder: string }[];
   }>('tf_email_folders', {
-    inbox: [
-      { id: '1', from: 'Google Analytics', fromEmail: 'noreply@google.com', subject: 'Your Weekly Analytics Report', body: 'Your weekly analytics report is ready. View your traffic insights and performance metrics.', date: new Date().toISOString(), read: false, starred: true },
-      { id: '2', from: 'SEO Alerts', fromEmail: 'alerts@trafficflow.io', subject: 'Keyword Ranking Improved', body: 'Congratulations! Your keyword "seo services" has moved up 3 positions.', date: new Date(Date.now() - 3600000).toISOString(), read: true, starred: false },
-      { id: '3', from: 'System', fromEmail: 'system@trafficflow.io', subject: 'Campaign Started Successfully', body: 'Your campaign "Premium SEO Boost" has been started and is now generating traffic.', date: new Date(Date.now() - 7200000).toISOString(), read: false, starred: false },
-    ],
-    sent: [
-      { id: '1', to: 'Client', toEmail: 'client@example.com', subject: 'Monthly Report', body: 'Please find attached your monthly SEO performance report.', date: new Date(Date.now() - 86400000).toISOString() },
-    ],
+    inbox: [],
+    sent: [],
     drafts: [],
     spam: [],
     trash: []
@@ -13724,15 +13720,88 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
               <div className="bg-white p-4 rounded-3xl border shadow-sm lg:col-span-1">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold text-slate-700 capitalize">{activeEmailFolder}</h3>
-                  <span className="text-xs text-slate-400">
-                    {activeEmailFolder === 'inbox' && emailFolders.inbox.length}
-                    {activeEmailFolder === 'sent' && emailFolders.sent.length}
-                    {activeEmailFolder === 'drafts' && emailFolders.drafts.length}
-                    {activeEmailFolder === 'spam' && emailFolders.spam.length}
-                    {activeEmailFolder === 'trash' && emailFolders.trash.length}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">
+                      {activeEmailFolder === 'inbox' && emailFolders.inbox.length}
+                      {activeEmailFolder === 'sent' && emailFolders.sent.length}
+                      {activeEmailFolder === 'drafts' && emailFolders.drafts.length}
+                      {activeEmailFolder === 'spam' && emailFolders.spam.length}
+                      {activeEmailFolder === 'trash' && emailFolders.trash.length}
+                    </span>
+                    {activeEmailFolder === 'inbox' && (
+                      <button
+                        onClick={async () => {
+                          if (!emailConfig.imap.host) {
+                            addToast?.('Configure IMAP settings first', 'error');
+                            return;
+                          }
+                          addToast?.('Fetching emails...', 'info');
+                          try {
+                            const response = await fetch('/api/email/inbox', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                action: 'fetch',
+                                config: emailConfig,
+                                folder: 'INBOX'
+                              })
+                            });
+                            const result = await response.json();
+                            if (result.success && result.emails) {
+                              setEmailFolders(prev => ({
+                                ...prev,
+                                inbox: result.emails.map((e: any) => ({
+                                  id: e.id,
+                                  from: e.from,
+                                  fromEmail: e.fromEmail,
+                                  subject: e.subject,
+                                  body: e.body || '',
+                                  date: e.date,
+                                  read: e.read,
+                                  starred: e.starred
+                                }))
+                              }));
+                              addToast?.(`Fetched ${result.emails.length} emails`, 'success');
+                            } else {
+                              addToast?.(result.error || 'Failed to fetch emails', 'error');
+                            }
+                          } catch (e) {
+                            addToast?.('Failed to fetch emails', 'error');
+                          }
+                        }}
+                        className="p-1 hover:bg-slate-100 rounded"
+                        title="Fetch Emails"
+                      >
+                        <RefreshCw size={14} className="text-slate-400" />
+                      </button>
+                    )}
+                    {(activeEmailFolder === 'spam' || activeEmailFolder === 'trash') && (
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Empty ${activeEmailFolder}? This cannot be undone.`)) {
+                            setEmailFolders(prev => ({
+                              ...prev,
+                              [activeEmailFolder]: []
+                            }));
+                            addToast?.(`${activeEmailFolder} emptied`, 'success');
+                          }
+                        }}
+                        className="p-1 hover:bg-rose-100 rounded"
+                        title={`Empty ${activeEmailFolder}`}
+                      >
+                        <Trash2 size={14} className="text-rose-400" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {activeEmailFolder === 'inbox' && emailFolders.inbox.length === 0 && (
+                    <div className="text-center py-8">
+                      <Inbox size={32} className="mx-auto mb-3 text-slate-300" />
+                      <p className="text-slate-400 text-xs">No emails</p>
+                      <p className="text-slate-300 text-[10px] mt-1">Configure IMAP to fetch emails</p>
+                    </div>
+                  )}
                   {activeEmailFolder === 'inbox' && emailFolders.inbox.map((email) => (
                     <div
                       key={email.id}
@@ -13754,6 +13823,9 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       <p className={`text-xs ${!email.read ? 'font-bold' : ''} text-slate-600 truncate`}>{email.subject}</p>
                     </div>
                   ))}
+                  {activeEmailFolder === 'sent' && emailFolders.sent.length === 0 && (
+                    <div className="text-center py-8 text-slate-400 text-xs">No sent emails</div>
+                  )}
                   {activeEmailFolder === 'sent' && emailFolders.sent.map((email) => (
                     <div
                       key={email.id}
@@ -13770,12 +13842,54 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   {activeEmailFolder === 'drafts' && emailFolders.drafts.length === 0 && (
                     <div className="text-center py-8 text-slate-400 text-xs">No drafts</div>
                   )}
+                  {activeEmailFolder === 'drafts' && emailFolders.drafts.map((email) => (
+                    <div
+                      key={email.id}
+                      onClick={() => {
+                        setComposeEmail({ to: email.toEmail || '', subject: email.subject, body: email.body });
+                        setShowComposeEmail(true);
+                      }}
+                      className="p-3 rounded-xl cursor-pointer hover:bg-slate-100"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-bold text-slate-700">To: {email.to}</p>
+                        <span className="text-[10px] text-slate-400">{new Date(email.date).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 truncate">{email.subject}</p>
+                    </div>
+                  ))}
                   {activeEmailFolder === 'spam' && emailFolders.spam.length === 0 && (
                     <div className="text-center py-8 text-slate-400 text-xs">No spam</div>
                   )}
+                  {activeEmailFolder === 'spam' && emailFolders.spam.map((email) => (
+                    <div
+                      key={email.id}
+                      onClick={() => setSelectedEmail(email)}
+                      className="p-3 rounded-xl cursor-pointer hover:bg-slate-100"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-bold text-slate-700">{email.from}</p>
+                        <span className="text-[10px] text-slate-400">{new Date(email.date).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 truncate">{email.subject}</p>
+                    </div>
+                  ))}
                   {activeEmailFolder === 'trash' && emailFolders.trash.length === 0 && (
                     <div className="text-center py-8 text-slate-400 text-xs">Trash is empty</div>
                   )}
+                  {activeEmailFolder === 'trash' && emailFolders.trash.map((email) => (
+                    <div
+                      key={email.id}
+                      onClick={() => setSelectedEmail(email)}
+                      className="p-3 rounded-xl cursor-pointer hover:bg-slate-100"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-bold text-slate-700">{email.from}</p>
+                        <span className="text-[10px] text-slate-400">{new Date(email.date).toLocaleDateString()}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 truncate">{email.subject}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
               
@@ -13784,7 +13898,25 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                 {selectedEmail ? (
                   <div className="h-full flex flex-col">
                     <div className="border-b pb-4 mb-4">
-                      <h3 className="text-lg font-bold text-slate-800 mb-2">{selectedEmail.subject}</h3>
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="text-lg font-bold text-slate-800">{selectedEmail.subject}</h3>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEmailFolders(prev => ({
+                                ...prev,
+                                [activeEmailFolder]: prev[activeEmailFolder as keyof typeof prev].map((e: any) => 
+                                  e.id === selectedEmail.id ? { ...e, starred: !e.starred } : e
+                                )
+                              }));
+                              setSelectedEmail({ ...selectedEmail, starred: !selectedEmail.starred });
+                            }}
+                            className={`p-1 rounded ${selectedEmail.starred ? 'text-amber-500' : 'text-slate-300'}`}
+                          >
+                            <Star size={16} fill={selectedEmail.starred ? 'currentColor' : 'none'} />
+                          </button>
+                        </div>
+                      </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold">
@@ -13798,16 +13930,16 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <span className="text-xs text-slate-400">{new Date(selectedEmail.date).toLocaleString()}</span>
                       </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto">
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedEmail.body}</p>
+                    <div className="flex-1 overflow-y-auto min-h-[200px]">
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedEmail.body || 'No content'}</p>
                     </div>
-                    <div className="flex gap-3 mt-4 pt-4 border-t">
+                    <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
                       <button 
                         onClick={() => {
                           setComposeEmail({ 
                             to: selectedEmail.fromEmail || '', 
                             subject: `Re: ${selectedEmail.subject}`, 
-                            body: '' 
+                            body: `\n\n--- Original Message ---\nFrom: ${selectedEmail.from}\nDate: ${selectedEmail.date}\n\n${selectedEmail.body}` 
                           });
                           setShowComposeEmail(true);
                         }}
@@ -13817,17 +13949,87 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       </button>
                       <button 
                         onClick={() => {
-                          setEmailFolders(prev => ({
-                            ...prev,
-                            trash: [...prev.trash, { ...selectedEmail, originalFolder: activeEmailFolder }],
-                            [activeEmailFolder]: prev[activeEmailFolder].filter((e: any) => e.id !== selectedEmail.id)
-                          }));
-                          setSelectedEmail(null);
-                          addToast?.('Email moved to trash', 'info');
+                          setComposeEmail({ 
+                            to: '', 
+                            subject: `Fwd: ${selectedEmail.subject}`, 
+                            body: `\n\n--- Forwarded Message ---\nFrom: ${selectedEmail.from}\nDate: ${selectedEmail.date}\n\n${selectedEmail.body}` 
+                          });
+                          setShowComposeEmail(true);
                         }}
-                        className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors flex items-center gap-2"
+                        className="px-4 py-2 bg-slate-600 text-white rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors flex items-center gap-2"
                       >
-                        <Trash2 size={14} /> Delete
+                        <Share2 size={14} /> Forward
+                      </button>
+                      {activeEmailFolder === 'inbox' && (
+                        <button 
+                          onClick={() => {
+                            setEmailFolders(prev => ({
+                              ...prev,
+                              spam: [...prev.spam, selectedEmail],
+                              inbox: prev.inbox.filter(e => e.id !== selectedEmail.id)
+                            }));
+                            setSelectedEmail(null);
+                            addToast?.('Marked as spam', 'info');
+                          }}
+                          className="px-4 py-2 border border-amber-200 text-amber-600 rounded-lg text-xs font-bold hover:bg-amber-50 transition-colors flex items-center gap-2"
+                        >
+                          <AlertCircle size={14} /> Spam
+                        </button>
+                      )}
+                      {activeEmailFolder === 'spam' && (
+                        <button 
+                          onClick={() => {
+                            setEmailFolders(prev => ({
+                              ...prev,
+                              inbox: [...prev.inbox, selectedEmail],
+                              spam: prev.spam.filter(e => e.id !== selectedEmail.id)
+                            }));
+                            setSelectedEmail(null);
+                            addToast?.('Moved to inbox', 'success');
+                          }}
+                          className="px-4 py-2 border border-emerald-200 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-50 transition-colors flex items-center gap-2"
+                        >
+                          <Inbox size={14} /> Not Spam
+                        </button>
+                      )}
+                      {activeEmailFolder === 'trash' && (
+                        <button 
+                          onClick={() => {
+                            const originalFolder = selectedEmail.originalFolder || 'inbox';
+                            setEmailFolders(prev => ({
+                              ...prev,
+                              [originalFolder]: [...prev[originalFolder as keyof typeof prev] as any, selectedEmail],
+                              trash: prev.trash.filter(e => e.id !== selectedEmail.id)
+                            }));
+                            setSelectedEmail(null);
+                            addToast?.('Email restored', 'success');
+                          }}
+                          className="px-4 py-2 border border-emerald-200 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-50 transition-colors flex items-center gap-2"
+                        >
+                          <RotateCcw size={14} /> Restore
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => {
+                          if (activeEmailFolder === 'trash') {
+                            setEmailFolders(prev => ({
+                              ...prev,
+                              trash: prev.trash.filter(e => e.id !== selectedEmail.id)
+                            }));
+                            addToast?.('Email permanently deleted', 'info');
+                          } else {
+                            setEmailFolders(prev => ({
+                              ...prev,
+                              trash: [...prev.trash, { ...selectedEmail, originalFolder: activeEmailFolder }],
+                              [activeEmailFolder]: prev[activeEmailFolder as keyof typeof prev].filter((e: any) => e.id !== selectedEmail.id)
+                            }));
+                            addToast?.('Email moved to trash', 'info');
+                          }
+                          setSelectedEmail(null);
+                        }}
+                        className="px-4 py-2 border border-rose-200 text-rose-600 rounded-lg text-xs font-bold hover:bg-rose-50 transition-colors flex items-center gap-2"
+                      >
+                        <Trash2 size={14} /> {activeEmailFolder === 'trash' ? 'Delete Forever' : 'Delete'}
                       </button>
                     </div>
                   </div>
@@ -13836,6 +14038,46 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                     <div className="text-center">
                       <Mail size={48} className="mx-auto mb-4 opacity-50" />
                       <p>Select an email to read</p>
+                      {emailFolders.inbox.length === 0 && emailConfig.imap.host && (
+                        <button
+                          onClick={async () => {
+                            addToast?.('Fetching emails...', 'info');
+                            try {
+                              const response = await fetch('/api/email/inbox', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  action: 'fetch',
+                                  config: emailConfig,
+                                  folder: 'INBOX'
+                                })
+                              });
+                              const result = await response.json();
+                              if (result.success && result.emails) {
+                                setEmailFolders(prev => ({
+                                  ...prev,
+                                  inbox: result.emails.map((e: any) => ({
+                                    id: e.id,
+                                    from: e.from,
+                                    fromEmail: e.fromEmail,
+                                    subject: e.subject,
+                                    body: e.body || '',
+                                    date: e.date,
+                                    read: e.read,
+                                    starred: e.starred
+                                  }))
+                                }));
+                                addToast?.(`Fetched ${result.emails.length} emails`, 'success');
+                              }
+                            } catch (e) {
+                              addToast?.('Failed to fetch emails', 'error');
+                            }
+                          }}
+                          className="mt-4 px-4 py-2 bg-cyan-600 text-white rounded-lg text-xs font-bold hover:bg-cyan-700"
+                        >
+                          Fetch Emails
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -14461,31 +14703,57 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   
                   {/* POP Settings */}
                   <div className="border-t pt-6">
-                    <h4 className="text-sm font-bold text-slate-700 mb-4">POP Settings (Incoming)</h4>
+                    <h4 className="text-sm font-bold text-slate-700 mb-4">IMAP Settings (Incoming Email)</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">POP Host</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Host</label>
                         <input 
                           type="text" 
-                          value={emailConfig.pop.host}
+                          value={emailConfig.imap.host}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            pop: { ...prev.pop, host: e.target.value }
+                            imap: { ...prev.imap, host: e.target.value }
                           }))}
-                          placeholder="pop.example.com"
+                          placeholder="imap.example.com"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Port</label>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Port</label>
                         <input 
                           type="number" 
-                          value={emailConfig.pop.port}
+                          value={emailConfig.imap.port}
                           onChange={(e) => setEmailConfig(prev => ({
                             ...prev,
-                            pop: { ...prev.pop, port: parseInt(e.target.value) }
+                            imap: { ...prev.imap, port: parseInt(e.target.value) }
                           }))}
-                          placeholder="995"
+                          placeholder="993"
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Username</label>
+                        <input 
+                          type="text" 
+                          value={emailConfig.imap.username}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            imap: { ...prev.imap, username: e.target.value }
+                          }))}
+                          placeholder="your@email.com"
+                          className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">IMAP Password</label>
+                        <input 
+                          type="password" 
+                          value={emailConfig.imap.password}
+                          onChange={(e) => setEmailConfig(prev => ({
+                            ...prev,
+                            imap: { ...prev.imap, password: e.target.value }
+                          }))}
+                          placeholder="••••••••"
                           className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                         />
                       </div>
