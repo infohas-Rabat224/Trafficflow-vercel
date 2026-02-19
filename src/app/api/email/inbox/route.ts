@@ -711,11 +711,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(popTestResult);
         
       case 'fetch':
-        // Determine which protocol to use
-        const useIMAP = protocol === 'imap' || (config?.imap?.host && !config?.pop?.host);
-        const usePOP = protocol === 'pop' || config?.pop?.host;
+        // Determine which protocol to use - check for non-empty host strings
+        const imapHost = config?.imap?.host?.trim() || '';
+        const popHost = config?.pop?.host?.trim() || '';
         
-        if (useIMAP && config?.imap?.host) {
+        // Prefer IMAP over POP3 if both are configured
+        const useIMAP = protocol === 'imap' || (imapHost && !popHost) || (imapHost && popHost);
+        const usePOP = protocol === 'pop' && popHost;
+        
+        console.log('Fetch request:', { protocol, imapHost, popHost, useIMAP, usePOP });
+        
+        if (useIMAP && imapHost) {
           if (!config.imap.username || !config.imap.password) {
             return NextResponse.json({
               success: false,
@@ -752,7 +758,7 @@ export async function POST(request: NextRequest) {
               debug: result.debug
             });
           }
-        } else if (usePOP && config?.pop?.host) {
+        } else if (usePOP && popHost) {
           if (!config.pop.username || !config.pop.password) {
             return NextResponse.json({
               success: false,
@@ -791,7 +797,7 @@ export async function POST(request: NextRequest) {
         } else {
           return NextResponse.json({
             success: false,
-            error: 'Configure IMAP or POP3 settings to fetch emails',
+            error: 'No incoming mail server configured. Please configure IMAP or POP3 settings in Email Configuration.',
             emails: [],
             requiresConfig: true
           });

@@ -14727,7 +14727,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   onChange={(e) => setEmailConfig(prev => ({ ...prev, provider: e.target.value as any }))}
                   className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
                 >
-                  <option value="custom">Custom SMTP/POP</option>
+                  <option value="custom">Custom SMTP/IMAP/POP3</option>
                   <option value="gmail">Gmail</option>
                   <option value="outlook">Outlook</option>
                   <option value="sendgrid">SendGrid</option>
@@ -14919,8 +14919,8 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   
                   {/* POP3 Settings */}
                   <div className="border-t pt-6">
-                    <h4 className="text-sm font-bold text-slate-700 mb-4">POP3 Settings (Alternative Incoming)</h4>
-                    <p className="text-xs text-slate-500 mb-3">POP3 downloads emails to this device. IMAP is recommended for multi-device access.</p>
+                    <h4 className="text-sm font-bold text-slate-700 mb-4">POP3 Settings (Incoming Email)</h4>
+                    <p className="text-xs text-slate-500 mb-3">POP3 downloads emails to this device. IMAP is recommended for multi-device sync. Scroll down to see all settings.</p>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 uppercase">POP3 Host</label>
