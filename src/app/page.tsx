@@ -4609,7 +4609,7 @@ const MainContent = () => {
   const [brandQueryData, setBrandQueryData] = useState<{ query: string; volume: number; trend: string }[]>([]);
   
   // Search Console Mock Data
-  const [gscData, setGscData] = useState<{ clicks: number; impressions: number; ctr: number; position: number; trend: string }>({
+  const [gscData, setGscData] = useState<{ clicks: number; impressions: number; ctr: number; position: number; trend: string } | null>({
     clicks: 0, impressions: 0, ctr: 0, position: 0, trend: 'stable'
   });
   
@@ -4730,7 +4730,6 @@ const MainContent = () => {
   const [apiKeys, setApiKeys] = useState<{ id: string; name: string; key: string; created: string; lastUsed: string; permissions: string[] }[]>([]);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [ga4Data, setGa4Data] = useState<any>(null);
-  const [gscData, setGscData] = useState<any>(null);
   const [integrationLoading, setIntegrationLoading] = useState<string | null>(null);
   const [showGa4Modal, setShowGa4Modal] = useState(false);
   const [showGscModal, setShowGscModal] = useState(false);
