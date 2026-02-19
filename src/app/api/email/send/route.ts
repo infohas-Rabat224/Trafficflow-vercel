@@ -175,23 +175,43 @@ async function sendViaSMTP(payload: EmailPayload): Promise<{ success: boolean; m
   }
   
   try {
-    // Configure the transporter based on encryption settings
+    // Determine the correct secure setting based on port and encryption
+    // Port 465 = SSL (secure: true)
+    // Port 587 = TLS/STARTTLS (secure: false, requireTLS: true)
+    // Port 25 = No encryption or STARTTLS
+    const isSSL = smtp.encryption === 'ssl' || smtp.port === 465;
+    const isTLS = smtp.encryption === 'tls' || smtp.port === 587 || smtp.port === 25;
+    
     const transportConfig: nodemailer.TransportOptions = {
       host: smtp.host,
       port: smtp.port,
-      secure: smtp.encryption === 'ssl', // true for 465, false for other ports
+      // secure: true for 465, false for other ports
+      secure: isSSL,
       auth: {
         user: smtp.username,
         pass: smtp.password
       },
-      // TLS options
-      tls: smtp.encryption === 'tls' ? {
-        rejectUnauthorized: false // Allow self-signed certificates
-      } : undefined,
+      // TLS/STARTTLS configuration
+      tls: {
+        rejectUnauthorized: false, // Allow self-signed certificates
+        minVersion: 'TLSv1', // Support older TLS versions
+      },
+      // For STARTTLS (port 587)
+      requireTLS: isTLS && !isSSL,
       // Connection timeout
-      connectionTimeout: 10000,
-      socketTimeout: 10000
+      connectionTimeout: 15000,
+      socketTimeout: 15000,
+      // Debug mode
+      logger: false
     } as nodemailer.TransportOptions;
+    
+    console.log('SMTP Config:', {
+      host: smtp.host,
+      port: smtp.port,
+      secure: isSSL,
+      requireTLS: isTLS && !isSSL,
+      encryption: smtp.encryption
+    });
     
     // Create transporter
     const transporter = nodemailer.createTransport(transportConfig);
@@ -243,6 +263,8 @@ async function sendViaSMTP(payload: EmailPayload): Promise<{ success: boolean; m
       errorMessage = 'Connection timed out. Check if the SMTP server is accessible.';
     } else if (error.code === 'ESOCKET') {
       errorMessage = 'Socket error. Try changing encryption settings (SSL/TLS/None).';
+    } else if (errorMessage.includes('wrong version number')) {
+      errorMessage = 'SSL/TLS mismatch. Try: Port 465 with SSL, or Port 587 with TLS.';
     }
     
     return { success: false, error: errorMessage };
@@ -452,27 +474,40 @@ export async function POST(request: NextRequest) {
         // Determine host for Gmail/Outlook
         let testHost = smtp.host;
         let testPort = smtp.port;
+        let testSecure = false;
+        let testRequireTLS = false;
         
         if (config.provider === 'gmail') {
           testHost = 'smtp.gmail.com';
           testPort = 587;
+          testSecure = false;
+          testRequireTLS = true;
         } else if (config.provider === 'outlook') {
           testHost = 'smtp.office365.com';
           testPort = 587;
+          testSecure = false;
+          testRequireTLS = true;
+        } else {
+          // Custom SMTP - determine based on port/encryption
+          testSecure = smtp.encryption === 'ssl' || smtp.port === 465;
+          testRequireTLS = (smtp.encryption === 'tls' || smtp.port === 587) && !testSecure;
         }
         
         try {
           const transporter = nodemailer.createTransport({
             host: testHost,
             port: testPort,
-            secure: config.provider === 'custom' ? smtp.encryption === 'ssl' : false,
+            secure: testSecure,
+            requireTLS: testRequireTLS,
             auth: {
               user: smtp.username,
               pass: smtp.password
             },
             tls: {
-              rejectUnauthorized: false
-            }
+              rejectUnauthorized: false,
+              minVersion: 'TLSv1'
+            },
+            connectionTimeout: 15000
           });
           
           await transporter.verify();
@@ -486,15 +521,35 @@ export async function POST(request: NextRequest) {
           });
           
         } catch (testError: any) {
+          let errorMsg = testError.message;
+          let hint = '';
+          
+          // Provide specific guidance for common errors
+          if (errorMsg.includes('wrong version number') || errorMsg.includes('SSL')) {
+            errorMsg = 'SSL/TLS configuration mismatch';
+            hint = 'Port 465 requires SSL. Port 587 requires TLS. Check your encryption setting matches your port.';
+          } else if (testError.code === 'EAUTH' || errorMsg.includes('Invalid login')) {
+            errorMsg = 'Authentication failed';
+            hint = config.provider === 'gmail' 
+              ? 'Use an app-specific password from myaccount.google.com/apppasswords'
+              : 'Check your username and password';
+          } else if (testError.code === 'ECONNECTION' || errorMsg.includes('connect ECONNREFUSED')) {
+            errorMsg = 'Could not connect to server';
+            hint = 'Check that the SMTP host and port are correct and the server is accessible.';
+          } else if (testError.code === 'ETIMEDOUT') {
+            errorMsg = 'Connection timed out';
+            hint = 'The SMTP server is not responding. Check host and port.';
+          }
+          
           return NextResponse.json({
             success: false,
-            error: `Connection failed: ${testError.message}`,
+            error: `Connection failed: ${errorMsg}`,
             provider: config.provider,
-            hint: config.provider === 'gmail' 
+            hint: hint || (config.provider === 'gmail' 
               ? 'Make sure you\'re using an app-specific password, not your regular Gmail password.'
               : config.provider === 'outlook'
               ? 'If 2FA is enabled, use an app password.'
-              : 'Check your SMTP credentials and server settings.'
+              : 'Check your SMTP credentials and server settings.')
           });
         }
       }
