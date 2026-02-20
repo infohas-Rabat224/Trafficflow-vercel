@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v23-0-enterprise';
+  : 'traffic-flow-v24-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -2307,6 +2307,733 @@ const SearchConsoleFootprintSimulator = {
 // ============================================================
 
 // ============================================================
+// PHASE 5: ANALYTICS FOOTPRINT SAFETY (v24.0)
+// ============================================================
+
+// --- PHASE 5 TASK 5.1: GA4 EVENT TIMING RANDOMIZATION ---
+const GA4EventTimingRandomizer = {
+  // Event timing configuration
+  eventDelays: {
+    page_view: { min: 0, max: 500, cluster: false },           // Immediate with slight variance
+    session_start: { min: 100, max: 300, cluster: false },      // Quick follow-up
+    first_visit: { min: 200, max: 600, cluster: false },        // New user event
+    scroll: { min: 2000, max: 15000, cluster: false },          // After reading
+    user_engagement: { min: 5000, max: 30000, cluster: false }, // After engagement
+    view_item: { min: 3000, max: 12000, cluster: false },       // Product view
+    add_to_cart: { min: 8000, max: 45000, cluster: false },     // Consideration time
+    purchase: { min: 15000, max: 90000, cluster: false },       // Checkout time
+    form_start: { min: 5000, max: 20000, cluster: false },      // Form interaction
+    generate_lead: { min: 20000, max: 60000, cluster: false },   // Lead gen time
+    video_start: { min: 3000, max: 15000, cluster: false },      // Video engagement
+    video_progress: { min: 8000, max: 40000, cluster: false },   // Video watching
+    file_download: { min: 5000, max: 25000, cluster: false },   // Download action
+    click: { min: 500, max: 5000, cluster: false },             // Click action
+    view_search_results: { min: 1000, max: 8000, cluster: false } // Search results
+  },
+  
+  // Cluster prevention settings
+  clusterPrevention: {
+    minSpacing: 800,      // Minimum 800ms between events
+    maxBatchSize: 3,      // Max 3 events in quick succession
+    batchCooldown: 5000   // 5s cooldown after a batch
+  },
+  
+  // Track recent events for cluster prevention
+  recentEventTimestamps: [] as number[],
+  
+  // Generate human-like delay for an event
+  generateEventDelay: (eventName: string): number => {
+    const config = GA4EventTimingRandomizer.eventDelays[eventName as keyof typeof GA4EventTimingRandomizer.eventDelays] || 
+                   { min: 1000, max: 5000, cluster: false };
+    
+    // Base delay with exponential distribution (more natural)
+    const baseDelay = config.min + Math.random() * (config.max - config.min);
+    
+    // Add variability (±20% for realism)
+    const variability = baseDelay * (0.8 + Math.random() * 0.4);
+    
+    // Apply cluster prevention
+    const adjustedDelay = GA4EventTimingRandomizer.applyClusterPrevention(variability, config.cluster);
+    
+    return Math.floor(adjustedDelay);
+  },
+  
+  // Apply cluster prevention to avoid detection
+  applyClusterPrevention: (baseDelay: number, canCluster: boolean): number => {
+    const now = Date.now();
+    const recent = GA4EventTimingRandomizer.recentEventTimestamps;
+    
+    // Clean old timestamps (> 30 seconds)
+    GA4EventTimingRandomizer.recentEventTimestamps = recent.filter(t => now - t < 30000);
+    
+    const recentCount = GA4EventTimingRandomizer.recentEventTimestamps.length;
+    
+    // If we have recent events, add spacing
+    if (recentCount > 0) {
+      const lastEvent = Math.max(...GA4EventTimingRandomizer.recentEventTimestamps);
+      const timeSinceLast = now - lastEvent;
+      
+      // If events are too close, add spacing
+      if (timeSinceLast < GA4EventTimingRandomizer.clusterPrevention.minSpacing) {
+        const additionalDelay = GA4EventTimingRandomizer.clusterPrevention.minSpacing - timeSinceLast;
+        return baseDelay + additionalDelay + Math.random() * 500;
+      }
+      
+      // If we've had a batch recently, enforce cooldown
+      if (recentCount >= GA4EventTimingRandomizer.clusterPrevention.maxBatchSize && 
+          timeSinceLast < GA4EventTimingRandomizer.clusterPrevention.batchCooldown) {
+        return baseDelay + GA4EventTimingRandomization.clusterPrevention.batchCooldown - timeSinceLast;
+      }
+    }
+    
+    return baseDelay;
+  },
+  
+  // Record an event timestamp
+  recordEvent: () => {
+    GA4EventTimingRandomizer.recentEventTimestamps.push(Date.now());
+  },
+  
+  // Generate a sequence of event delays for a session
+  generateSessionEventSequence: (sessionType: 'bounce' | 'normal' | 'engaged' | 'conversion'): { event: string; delay: number }[] => {
+    const sequence: { event: string; delay: number }[] = [];
+    
+    // Always start with page_view
+    let cumulativeDelay = GA4EventTimingRandomizer.generateEventDelay('page_view');
+    sequence.push({ event: 'page_view', delay: cumulativeDelay });
+    
+    // Session start follows
+    cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('session_start');
+    sequence.push({ event: 'session_start', delay: cumulativeDelay });
+    
+    if (sessionType === 'bounce') {
+      // Bounce: minimal events
+      return sequence;
+    }
+    
+    // Normal and above: scroll event
+    cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('scroll');
+    sequence.push({ event: 'scroll', delay: cumulativeDelay });
+    
+    // User engagement
+    cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('user_engagement');
+    sequence.push({ event: 'user_engagement', delay: cumulativeDelay });
+    
+    if (sessionType === 'engaged' || sessionType === 'conversion') {
+      // Additional interactions
+      if (Math.random() < 0.3) {
+        cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('video_start');
+        sequence.push({ event: 'video_start', delay: cumulativeDelay });
+      }
+      
+      if (Math.random() < 0.2) {
+        cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('file_download');
+        sequence.push({ event: 'file_download', delay: cumulativeDelay });
+      }
+    }
+    
+    if (sessionType === 'conversion') {
+      // Conversion events
+      cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('view_item');
+      sequence.push({ event: 'view_item', delay: cumulativeDelay });
+      
+      cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('add_to_cart');
+      sequence.push({ event: 'add_to_cart', delay: cumulativeDelay });
+      
+      cumulativeDelay += GA4EventTimingRandomizer.generateEventDelay('purchase');
+      sequence.push({ event: 'purchase', delay: cumulativeDelay });
+    }
+    
+    return sequence;
+  },
+  
+  // Get statistics
+  getStats: () => {
+    const recent = GA4EventTimingRandomizer.recentEventTimestamps;
+    return {
+      recentEventCount: recent.length,
+      lastEventTime: recent.length > 0 ? Math.max(...recent) : null
+    };
+  }
+};
+
+// Fix typo in cluster prevention reference
+const GA4EventTimingRandomization = GA4EventTimingRandomizer;
+
+// --- PHASE 5 TASK 5.2: SESSION DURATION REALISM ---
+const SessionDurationRealism = {
+  // Target average session: 2-4 minutes (120,000 - 240,000 ms)
+  targetSessionRange: {
+    min: 120000,  // 2 minutes
+    max: 240000,  // 4 minutes
+    target: 180000 // 3 minutes ideal
+  },
+  
+  // Standard deviation for natural variation (30% of target)
+  standardDeviationRatio: 0.30,
+  
+  // Session type distribution
+  sessionTypeDistribution: {
+    bounce: 0.10,      // 10% bounce (< 30s)
+    short: 0.20,       // 20% short (30s - 2min)
+    normal: 0.45,      // 45% normal (2min - 4min)
+    long: 0.20,        // 20% long (4min - 8min)
+    extended: 0.05     // 5% extended (8min+)
+  },
+  
+  // Generate session duration with standard deviation
+  generateSessionDuration: (countryCode?: string, ispType?: string): number => {
+    // Get base from country patterns if available
+    const geoPattern = GeoBehaviorPatterns.getPattern(countryCode || 'US');
+    let baseDuration = geoPattern.avgSessionTime;
+    
+    // Adjust for ISP type
+    if (ispType) {
+      const ispModifiers: Record<string, number> = {
+        residential: 1.0,
+        mobile: 0.75,      // Shorter on mobile
+        business: 1.3,     // Longer on business
+        datacenter: 0.6    // Shorter on datacenter
+      };
+      baseDuration *= ispModifiers[ispType] || 1.0;
+    }
+    
+    // Apply Gaussian distribution for natural variation
+    const mean = Math.min(Math.max(baseDuration, SessionDurationRealism.targetSessionRange.min), 
+                          SessionDurationRealism.targetSessionRange.max);
+    const stdDev = mean * SessionDurationRealism.standardDeviationRatio;
+    
+    // Box-Muller transform for Gaussian distribution
+    const u1 = Math.random();
+    const u2 = Math.random();
+    const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    
+    let duration = mean + z * stdDev;
+    
+    // Ensure positive and within reasonable bounds
+    duration = Math.max(15000, Math.min(600000, duration)); // 15s - 10min
+    
+    return Math.floor(duration);
+  },
+  
+  // Determine session type based on duration
+  classifySession: (duration: number): 'bounce' | 'short' | 'normal' | 'long' | 'extended' => {
+    if (duration < 30000) return 'bounce';
+    if (duration < 120000) return 'short';
+    if (duration < 240000) return 'normal';
+    if (duration < 480000) return 'long';
+    return 'extended';
+  },
+  
+  // Generate weighted session type
+  generateWeightedSessionType: (): 'bounce' | 'short' | 'normal' | 'long' | 'extended' => {
+    const rand = Math.random();
+    const dist = SessionDurationRealism.sessionTypeDistribution;
+    
+    if (rand < dist.bounce) return 'bounce';
+    if (rand < dist.bounce + dist.short) return 'short';
+    if (rand < dist.bounce + dist.short + dist.normal) return 'normal';
+    if (rand < dist.bounce + dist.short + dist.normal + dist.long) return 'long';
+    return 'extended';
+  },
+  
+  // Generate duration for specific session type
+  generateDurationForType: (type: 'bounce' | 'short' | 'normal' | 'long' | 'extended'): number => {
+    const ranges = {
+      bounce: { min: 5000, max: 30000 },
+      short: { min: 30000, max: 120000 },
+      normal: { min: 120000, max: 240000 },
+      long: { min: 240000, max: 480000 },
+      extended: { min: 480000, max: 600000 }
+    };
+    
+    const range = ranges[type];
+    // Exponential distribution favoring lower values
+    const factor = -Math.log(1 - Math.random());
+    const duration = range.min + (range.max - range.min) * (1 - Math.exp(-factor));
+    
+    return Math.floor(duration);
+  },
+  
+  // Calculate session statistics
+  calculateSessionStats: (durations: number[]): {
+    mean: number;
+    median: number;
+    stdDev: number;
+    min: number;
+    max: number;
+    withinTarget: number;
+  } => {
+    if (durations.length === 0) {
+      return { mean: 0, median: 0, stdDev: 0, min: 0, max: 0, withinTarget: 0 };
+    }
+    
+    const sorted = [...durations].sort((a, b) => a - b);
+    const mean = durations.reduce((a, b) => a + b, 0) / durations.length;
+    const median = sorted[Math.floor(sorted.length / 2)];
+    
+    const variance = durations.reduce((sum, d) => sum + Math.pow(d - mean, 2), 0) / durations.length;
+    const stdDev = Math.sqrt(variance);
+    
+    const withinTarget = durations.filter(d => 
+      d >= SessionDurationRealism.targetSessionRange.min && 
+      d <= SessionDurationRealism.targetSessionRange.max
+    ).length / durations.length * 100;
+    
+    return {
+      mean: Math.floor(mean),
+      median,
+      stdDev: Math.floor(stdDev),
+      min: sorted[0],
+      max: sorted[sorted.length - 1],
+      withinTarget
+    };
+  }
+};
+
+// --- PHASE 5 TASK 5.3: RETURN VISITOR SIMULATION ---
+const ReturnVisitorSimulator = {
+  // Configuration
+  returnVisitorRate: {
+    min: 0.20,   // 20% minimum
+    max: 0.30,   // 30% maximum
+    target: 0.25 // 25% ideal
+  },
+  
+  // Behavior modifiers for returning visitors
+  returningVisitorBehavior: {
+    interactionSpeedMultiplier: 0.85,  // 15% faster interactions
+    pagesPerSessionMultiplier: 1.3,    // 30% more pages
+    sessionDurationMultiplier: 1.2,    // 20% longer sessions
+    conversionProbabilityMultiplier: 2.0, // 2x more likely to convert
+    bounceRateMultiplier: 0.5          // 50% less likely to bounce
+  },
+  
+  // Cookie/session storage keys
+  storageKeys: {
+    knownVisitors: 'tf_known_visitors',
+    visitorProfiles: 'tf_visitor_profiles',
+    lastVisit: 'tf_last_visit'
+  },
+  
+  // In-memory visitor database
+  knownVisitors: new Map<string, {
+    firstVisit: number;
+    lastVisit: number;
+    visitCount: number;
+    totalDuration: number;
+    converted: boolean;
+  }>(),
+  
+  // Determine if session should be a returning visitor
+  shouldSimulateReturnVisitor: (existingVisitorCount: number, totalSessions: number): boolean => {
+    // Calculate current rate
+    const currentRate = existingVisitorCount / Math.max(1, totalSessions);
+    
+    // Adjust probability to maintain target rate
+    let probability = ReturnVisitorSimulator.returnVisitorRate.target;
+    
+    // If we have enough visitors in pool
+    if (ReturnVisitorSimulator.knownVisitors.size > 5) {
+      // If rate is below target, increase probability
+      if (currentRate < ReturnVisitorSimulator.returnVisitorRate.min) {
+        probability = 0.5; // Higher chance to return
+      }
+      // If rate is above target, decrease probability
+      else if (currentRate > ReturnVisitorSimulator.returnVisitorRate.max) {
+        probability = 0.1; // Lower chance to return
+      }
+    }
+    
+    return Math.random() < probability;
+  },
+  
+  // Get a returning visitor from the pool
+  getReturningVisitor: (): string | null => {
+    const visitors = Array.from(ReturnVisitorSimulator.knownVisitors.entries());
+    
+    if (visitors.length === 0) return null;
+    
+    // Weight by recency (more recent = less likely to return)
+    // and by visit count (more visits = more loyal)
+    const now = Date.now();
+    const weighted = visitors.map(([clientId, profile]) => {
+      const daysSinceLastVisit = (now - profile.lastVisit) / (24 * 60 * 60 * 1000);
+      const recencyWeight = Math.min(1, daysSinceLastVisit / 7); // Normalize to week
+      const loyaltyWeight = Math.min(1, profile.visitCount / 5); // Normalize to 5 visits
+      
+      return {
+        clientId,
+        weight: recencyWeight * 0.3 + loyaltyWeight * 0.7
+      };
+    });
+    
+    // Weighted random selection
+    const totalWeight = weighted.reduce((sum, v) => sum + v.weight, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (const visitor of weighted) {
+      random -= visitor.weight;
+      if (random <= 0) {
+        return visitor.clientId;
+      }
+    }
+    
+    return visitors[0][0]; // Fallback to first
+  },
+  
+  // Register a new visitor
+  registerVisitor: (clientId: string): void => {
+    const existing = ReturnVisitorSimulator.knownVisitors.get(clientId);
+    
+    if (existing) {
+      // Update existing visitor
+      existing.lastVisit = Date.now();
+      existing.visitCount++;
+    } else {
+      // Create new visitor profile
+      ReturnVisitorSimulator.knownVisitors.set(clientId, {
+        firstVisit: Date.now(),
+        lastVisit: Date.now(),
+        visitCount: 1,
+        totalDuration: 0,
+        converted: false
+      });
+    }
+  },
+  
+  // Update visitor profile after session
+  updateVisitorProfile: (clientId: string, sessionDuration: number, converted: boolean): void => {
+    const profile = ReturnVisitorSimulator.knownVisitors.get(clientId);
+    
+    if (profile) {
+      profile.totalDuration += sessionDuration;
+      if (converted) profile.converted = true;
+    }
+  },
+  
+  // Apply returning visitor behavior modifiers
+  applyReturningVisitorModifiers: (baseBehavior: {
+    interactionDelay: number;
+    pagesPerSession: number;
+    sessionDuration: number;
+    conversionProbability: number;
+    bounceProbability: number;
+  }): typeof baseBehavior => {
+    const mods = ReturnVisitorSimulator.returningVisitorBehavior;
+    
+    return {
+      interactionDelay: Math.floor(baseBehavior.interactionDelay * mods.interactionSpeedMultiplier),
+      pagesPerSession: Math.ceil(baseBehavior.pagesPerSession * mods.pagesPerSessionMultiplier),
+      sessionDuration: Math.floor(baseBehavior.sessionDuration * mods.sessionDurationMultiplier),
+      conversionProbability: Math.min(0.10, baseBehavior.conversionProbability * mods.conversionProbabilityMultiplier),
+      bounceProbability: baseBehavior.bounceProbability * mods.bounceRateMultiplier
+    };
+  },
+  
+  // Get returning visitor statistics
+  getStats: () => {
+    const visitors = Array.from(ReturnVisitorSimulator.knownVisitors.values());
+    
+    if (visitors.length === 0) {
+      return {
+        totalKnownVisitors: 0,
+        returningRate: 0,
+        avgVisitsPerVisitor: 0,
+        conversionRate: 0
+      };
+    }
+    
+    const totalVisits = visitors.reduce((sum, v) => sum + v.visitCount, 0);
+    const returningCount = visitors.filter(v => v.visitCount > 1).length;
+    const convertedCount = visitors.filter(v => v.converted).length;
+    
+    return {
+      totalKnownVisitors: visitors.length,
+      returningRate: returningCount / visitors.length,
+      avgVisitsPerVisitor: totalVisits / visitors.length,
+      conversionRate: convertedCount / visitors.length
+    };
+  }
+};
+
+// --- PHASE 5 TASK 5.4: CONVERSION RATE REALISM ---
+const ConversionRateRealism = {
+  // Industry standard conversion rates: 1-3%
+  targetRange: {
+    min: 0.01,   // 1%
+    max: 0.03,   // 3%
+    target: 0.02 // 2% ideal
+  },
+  
+  // Conversion modifiers by traffic source
+  sourceModifiers: {
+    organic: { multiplier: 1.2, variance: 0.3 },
+    paid: { multiplier: 1.5, variance: 0.4 },
+    social: { multiplier: 0.6, variance: 0.2 },
+    referral: { multiplier: 1.0, variance: 0.25 },
+    direct: { multiplier: 1.3, variance: 0.3 },
+    email: { multiplier: 2.0, variance: 0.5 }
+  },
+  
+  // Conversion modifiers by session type
+  sessionTypeModifiers: {
+    bounce: { probability: 0.001 },  // Almost never
+    short: { probability: 0.005 },    // 0.5%
+    normal: { probability: 0.015 },   // 1.5%
+    long: { probability: 0.03 },      // 3%
+    extended: { probability: 0.05 }   // 5%
+  },
+  
+  // Track conversion history for spike prevention
+  conversionHistory: [] as { timestamp: number; converted: boolean }[],
+  maxHistorySize: 1000,
+  
+  // Generate conversion rate with variability
+  generateConversionRate: (
+    trafficSource: keyof typeof ConversionRateRealism.sourceModifiers = 'organic',
+    sessionType: 'bounce' | 'short' | 'normal' | 'long' | 'extended' = 'normal',
+    campaignMultiplier: number = 1.0
+  ): number => {
+    // Get base from session type
+    const sessionBase = ConversionRateRealism.sessionTypeModifiers[sessionType].probability;
+    
+    // Apply source modifier
+    const sourceConfig = ConversionRateRealism.sourceModifiers[trafficSource];
+    let rate = sessionBase * sourceConfig.multiplier * campaignMultiplier;
+    
+    // Add variance
+    const variance = (Math.random() - 0.5) * sourceConfig.variance * rate;
+    rate += variance;
+    
+    // Clamp to target range
+    rate = Math.max(ConversionRateRealism.targetRange.min * 0.5, 
+                    Math.min(ConversionRateRealism.targetRange.max * 2, rate));
+    
+    // Apply spike prevention
+    rate = ConversionRateRealism.preventConversionSpike(rate);
+    
+    return rate;
+  },
+  
+  // Prevent conversion rate spikes
+  preventConversionSpike: (rate: number): number => {
+    const history = ConversionRateRealism.conversionHistory;
+    
+    if (history.length >= 50) {
+      // Calculate recent conversion rate
+      const recent = history.slice(-100);
+      const recentRate = recent.filter(h => h.converted).length / recent.length;
+      
+      // If current rate would spike above 150% of recent average
+      if (rate > recentRate * 1.5) {
+        // Cap at 120% of recent average
+        rate = recentRate * 1.2;
+      }
+    }
+    
+    return rate;
+  },
+  
+  // Determine if session converts
+  shouldConvert: (
+    trafficSource: keyof typeof ConversionRateRealism.sourceModifiers,
+    sessionType: 'bounce' | 'short' | 'normal' | 'long' | 'extended',
+    campaignMultiplier: number = 1.0
+  ): boolean => {
+    const rate = ConversionRateRealism.generateConversionRate(trafficSource, sessionType, campaignMultiplier);
+    const converts = Math.random() < rate;
+    
+    // Record in history
+    ConversionRateRealism.conversionHistory.push({
+      timestamp: Date.now(),
+      converted: converts
+    });
+    
+    // Trim history
+    if (ConversionRateRealism.conversionHistory.length > ConversionRateRealism.maxHistorySize) {
+      ConversionRateRealism.conversionHistory.shift();
+    }
+    
+    return converts;
+  },
+  
+  // Get conversion statistics
+  getStats: () => {
+    const history = ConversionRateRealism.conversionHistory;
+    
+    if (history.length === 0) {
+      return {
+        totalSessions: 0,
+        conversions: 0,
+        rate: 0,
+        withinTarget: true
+      };
+    }
+    
+    const conversions = history.filter(h => h.converted).length;
+    const rate = conversions / history.length;
+    
+    return {
+      totalSessions: history.length,
+      conversions,
+      rate,
+      withinTarget: rate >= ConversionRateRealism.targetRange.min && 
+                    rate <= ConversionRateRealism.targetRange.max
+    };
+  }
+};
+
+// --- PHASE 5 TASK 5.5: UTM PARAMETER VARIATION ---
+const UTMParameterVariator = {
+  // UTM source variations
+  sources: {
+    organic: ['google', 'bing', 'yahoo', 'duckduckgo', 'yandex', 'baidu'],
+    social: ['facebook', 'twitter', 'linkedin', 'instagram', 'pinterest', 'tiktok', 'reddit'],
+    paid: ['google_ads', 'bing_ads', 'facebook_ads', 'linkedin_ads', 'twitter_ads'],
+    email: ['newsletter', 'campaign', 'drip', 'transactional'],
+    referral: ['partner', 'affiliate', 'review', 'directory'],
+    direct: ['direct', '(none)', 'bookmark', 'typed']
+  },
+  
+  // UTM medium variations
+  mediums: {
+    organic: ['organic', 'natural', 'seo'],
+    social: ['social', 'social-media', 'social_network'],
+    paid: ['cpc', 'ppc', 'paid', 'display', 'retargeting'],
+    email: ['email', 'newsletter', 'mail'],
+    referral: ['referral', 'affiliate', 'partner'],
+    direct: ['(none)', 'direct']
+  },
+  
+  // Campaign name templates
+  campaignTemplates: [
+    '{keyword}_campaign',
+    '{source}_{date}',
+    '{category}_traffic',
+    'campaign_{id}',
+    '{keyword}_{source}',
+    'trafficflow_{date}'
+  ],
+  
+  // UTM content variations for A/B testing simulation
+  contentVariations: [
+    'headline_a', 'headline_b', 'cta_primary', 'cta_secondary',
+    'image_hero', 'image_product', 'landing_main', 'landing_alt',
+    'desktop', 'mobile', 'tablet', 'variation_1', 'variation_2'
+  ],
+  
+  // UTM term variations
+  termVariations: [
+    '{keyword}',
+    '{keyword}_exact',
+    '{keyword}_phrase',
+    '{keyword}_broad',
+    '{keyword}_modified'
+  ],
+  
+  // Generate varied UTM parameters
+  generateUTMParameters: (
+    baseKeyword: string,
+    trafficType: 'organic' | 'social' | 'paid' | 'email' | 'referral' | 'direct' = 'organic',
+    campaignId: string
+  ): {
+    utm_source: string;
+    utm_medium: string;
+    utm_campaign: string;
+    utm_content?: string;
+    utm_term?: string;
+  } => {
+    // Select source with variation
+    const sources = UTMParameterVariator.sources[trafficType];
+    const source = sources[Math.floor(Math.random() * sources.length)];
+    
+    // Select medium with variation
+    const mediums = UTMParameterVariator.mediums[trafficType];
+    const medium = mediums[Math.floor(Math.random() * mediums.length)];
+    
+    // Generate campaign name
+    const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const campaignTemplate = UTMParameterVariator.campaignTemplates[
+      Math.floor(Math.random() * UTMParameterVariator.campaignTemplates.length)
+    ];
+    const campaign = campaignTemplate
+      .replace('{keyword}', baseKeyword.replace(/\s+/g, '_').toLowerCase())
+      .replace('{source}', source)
+      .replace('{date}', date)
+      .replace('{category}', trafficType)
+      .replace('{id}', campaignId.substring(0, 8));
+    
+    // Build UTM object
+    const utm: ReturnType<typeof UTMParameterVariator.generateUTMParameters> = {
+      utm_source: source,
+      utm_medium: medium,
+      utm_campaign: campaign
+    };
+    
+    // Add content variation (50% of time)
+    if (Math.random() < 0.5) {
+      utm.utm_content = UTMParameterVariator.contentVariations[
+        Math.floor(Math.random() * UTMParameterVariator.contentVariations.length)
+      ];
+    }
+    
+    // Add term variation (for search traffic)
+    if (trafficType === 'organic' || trafficType === 'paid') {
+      const termTemplate = UTMParameterVariator.termVariations[
+        Math.floor(Math.random() * UTMParameterVariator.termVariations.length)
+      ];
+      utm.utm_term = termTemplate.replace('{keyword}', baseKeyword.replace(/\s+/g, '_').toLowerCase());
+    }
+    
+    return utm;
+  },
+  
+  // Build UTM query string
+  buildUTMQueryString: (utm: ReturnType<typeof UTMParameterVariator.generateUTMParameters>): string => {
+    const params = new URLSearchParams();
+    
+    params.set('utm_source', utm.utm_source);
+    params.set('utm_medium', utm.utm_medium);
+    params.set('utm_campaign', utm.utm_campaign);
+    
+    if (utm.utm_content) params.set('utm_content', utm.utm_content);
+    if (utm.utm_term) params.set('utm_term', utm.utm_term);
+    
+    return params.toString();
+  },
+  
+  // Generate full URL with UTM parameters
+  addUTMToUrl: (baseUrl: string, keyword: string, trafficType: 'organic' | 'social' | 'paid' | 'email' | 'referral' | 'direct', campaignId: string): string => {
+    const utm = UTMParameterVariator.generateUTMParameters(keyword, trafficType, campaignId);
+    const utmString = UTMParameterVariator.buildUTMQueryString(utm);
+    
+    const url = new URL(baseUrl);
+    url.searchParams.set('utm_source', utm.utm_source);
+    url.searchParams.set('utm_medium', utm.utm_medium);
+    url.searchParams.set('utm_campaign', utm.utm_campaign);
+    if (utm.utm_content) url.searchParams.set('utm_content', utm.utm_content);
+    if (utm.utm_term) url.searchParams.set('utm_term', utm.utm_term);
+    
+    return url.toString();
+  },
+  
+  // Get UTM statistics for analytics
+  getUTMStats: () => {
+    return {
+      availableSources: Object.values(UTMParameterVariator.sources).flat().length,
+      availableMediums: Object.values(UTMParameterVariator.mediums).flat().length,
+      campaignTemplates: UTMParameterVariator.campaignTemplates.length,
+      contentVariations: UTMParameterVariator.contentVariations.length
+    };
+  }
+};
+
+// ============================================================
+// END PHASE 5 MODULES
+// ============================================================
+
+// ============================================================
 // SEO DOMINATION MODULES (PHASE 1, 2, 3)
 // ============================================================
 
@@ -3065,7 +3792,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v23.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v24.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -4221,7 +4948,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v23.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v24.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -9103,7 +9830,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v23.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v24.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -9155,7 +9882,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v23.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v24.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -10850,7 +11577,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v23.0
+                        TrafficFlow Enterprise v24.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -11031,7 +11758,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v23.0
+Report generated by TrafficFlow Enterprise v24.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -12017,7 +12744,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v23.0
+                        TrafficFlow Enterprise v24.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
