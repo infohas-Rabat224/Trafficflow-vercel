@@ -413,7 +413,7 @@ const SessionManager = {
   }
 };
 
-// --- MODULE: HUMAN BEHAVIOR SIMULATOR ---
+// --- MODULE: HUMAN BEHAVIOR SIMULATOR (PHASE 1 ENHANCED) ---
 const HumanBehaviorSimulator = {
   // Poisson-distributed timing (more natural than fixed intervals)
   getPoissonDelay: (lambda: number) => {
@@ -427,12 +427,13 @@ const HumanBehaviorSimulator = {
     return (k - 1) * 1000;
   },
   
-  // Realistic time-on-page based on content
+  // PHASE 1.1: Realistic time-on-page based on content (30s - 5min requirement)
   getTimeOnPage: (contentLength: 'short' | 'medium' | 'long' = 'medium') => {
+    // Updated ranges to meet 30s-5min requirement
     const ranges = {
-      short: { min: 15000, max: 45000 },      // 15-45 seconds
-      medium: { min: 30000, max: 120000 },    // 30s - 2min
-      long: { min: 60000, max: 300000 }       // 1-5 minutes
+      short: { min: 30000, max: 90000 },       // 30s - 1.5min
+      medium: { min: 60000, max: 180000 },      // 1min - 3min
+      long: { min: 120000, max: 300000 }        // 2min - 5min
     };
     const range = ranges[contentLength];
     // Exponential distribution favoring lower values
@@ -441,7 +442,7 @@ const HumanBehaviorSimulator = {
     return Math.floor(time);
   },
   
-  // Scroll depth distribution (not just 25/50/100)
+  // PHASE 1.2: Enhanced scroll behavior with speeds, pauses, and reading zones
   getScrollDepths: () => {
     const allDepths = [10, 25, 35, 50, 65, 75, 85, 90, 100];
     const numDepths = Math.floor(Math.random() * 5) + 2; // 2-6 scroll events
@@ -453,23 +454,87 @@ const HumanBehaviorSimulator = {
     return selectedDepths.sort((a, b) => a - b);
   },
   
-  // Pages per session distribution
-  getPagesPerSession: () => {
+  // PHASE 1.2: Variable scroll speeds (pixels per second)
+  getScrollSpeed: (): 'slow' | 'medium' | 'fast' => {
     const rand = Math.random();
-    if (rand < 0.35) return 1;        // 35% bounce (single page)
-    if (rand < 0.60) return 2;        // 25% view 2 pages
-    if (rand < 0.80) return 3;        // 20% view 3 pages
-    if (rand < 0.92) return 4;        // 12% view 4 pages
-    return Math.floor(Math.random() * 4) + 5; // 8% view 5+ pages
+    if (rand < 0.3) return 'slow';     // 30% slow readers
+    if (rand < 0.7) return 'medium';   // 40% medium
+    return 'fast';                      // 30% fast scrollers
   },
   
-  // Human reaction time (click delays)
+  // PHASE 1.2: Random pauses during scrolling (milliseconds)
+  getScrollPauses: (): number[] => {
+    const numPauses = Math.floor(Math.random() * 4) + 1; // 1-4 pauses
+    const pauses: number[] = [];
+    for (let i = 0; i < numPauses; i++) {
+      pauses.push(500 + Math.floor(Math.random() * 2000)); // 0.5-2.5s pause
+    }
+    return pauses;
+  },
+  
+  // PHASE 1.2: Reading zones detection simulation
+  getReadingZones: (): string[] => {
+    const zones = ['header', 'hero', 'content', 'sidebar', 'footer'];
+    const numZones = Math.floor(Math.random() * 3) + 2; // 2-4 zones
+    return zones.sort(() => Math.random() - 0.5).slice(0, numZones);
+  },
+  
+  // PHASE 1.4: Pages per session (optimized for 2-4 pages to reduce bounce)
+  getPagesPerSession: () => {
+    const rand = Math.random();
+    // Optimized distribution: prioritize 2-4 pages
+    if (rand < 0.10) return 1;        // 10% bounce (reduced from 35%)
+    if (rand < 0.35) return 2;        // 25% view 2 pages
+    if (rand < 0.65) return 3;        // 30% view 3 pages
+    if (rand < 0.85) return 4;        // 20% view 4 pages
+    return Math.floor(Math.random() * 3) + 5; // 15% view 5+ pages
+  },
+  
+  // PHASE 1.3: Human reaction time (click delays)
   getReactionTime: () => {
     // Normal distribution centered at 250ms
     const u1 = Math.random();
     const u2 = Math.random();
     const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
     return Math.max(150, Math.floor(250 + z * 100));
+  },
+  
+  // PHASE 1.3: Hover delay before clicking (milliseconds)
+  getHoverDelay: (): number => {
+    const base = 100 + Math.floor(Math.random() * 400); // 100-500ms base
+    const variation = Math.random() < 0.3 ? Math.floor(Math.random() * 300) : 0; // 30% have extra delay
+    return base + variation;
+  },
+  
+  // PHASE 1.3: Non-linear click path generation
+  generateClickPath: (numPages: number): number[] => {
+    const path: number[] = [0]; // Start at first page
+    const visited = new Set([0]);
+    
+    for (let i = 1; i < numPages; i++) {
+      // Non-linear: can go forward, backward, or skip
+      const lastPage = path[path.length - 1];
+      let nextPage: number;
+      
+      const action = Math.random();
+      if (action < 0.6) {
+        // 60% forward
+        nextPage = lastPage + 1;
+      } else if (action < 0.8) {
+        // 20% skip forward
+        nextPage = Math.min(lastPage + 2, numPages - 1);
+      } else {
+        // 20% go back to previous
+        nextPage = path.length > 1 ? path[path.length - 2] : 0;
+      }
+      
+      if (!visited.has(nextPage) || Math.random() < 0.3) {
+        path.push(nextPage);
+        visited.add(nextPage);
+      }
+    }
+    
+    return path;
   },
   
   // Mouse movement simulation points (Bezier curve)
@@ -507,30 +572,57 @@ const HumanBehaviorSimulator = {
 
 // --- MODULE: TEMPORAL PATTERNS ---
 const TemporalPatterns = {
-  // Check if current time is within business hours (local time)
-  isBusinessHours: (timezone: string) => {
+  // Timezone offset map (hours from UTC) - safe calculation without Intl API
+  timezoneOffsets: {
+    'America/New_York': -5, 'Europe/London': 0, 'Europe/Berlin': 1, 'Asia/Tokyo': 9,
+    'America/Los_Angeles': -8, 'America/Chicago': -6, 'Europe/Paris': 1, 'UTC': 0
+  },
+  
+  // Safe local hour calculation (no Intl.DateTimeFormat)
+  getLocalHour: function(timezone: string): number {
     try {
       const now = new Date();
-      const localHour = parseInt(now.toLocaleString('en-US', { 
-        timeZone: timezone, 
-        hour: 'numeric', 
-        hour12: false 
-      }));
+      const offset = this.timezoneOffsets[timezone] || 0;
+      let localHour = now.getUTCHours() + offset;
+      if (localHour >= 24) localHour -= 24;
+      if (localHour < 0) localHour += 24;
+      return Math.floor(localHour);
+    } catch {
+      return new Date().getUTCHours();
+    }
+  },
+  
+  // Safe local day calculation (no Intl.DateTimeFormat)
+  getLocalDay: function(timezone: string): number {
+    try {
+      const now = new Date();
+      const offset = this.timezoneOffsets[timezone] || 0;
+      const utcHour = now.getUTCHours();
+      const utcDay = now.getUTCDay();
+      const localHour = utcHour + offset;
+      
+      if (localHour >= 24) return (utcDay + 1) % 7;
+      if (localHour < 0) return (utcDay - 1 + 7) % 7;
+      return utcDay;
+    } catch {
+      return new Date().getUTCDay();
+    }
+  },
+  
+  // Check if current time is within business hours (local time) - SAFE VERSION
+  isBusinessHours: function(timezone: string): boolean {
+    try {
+      const localHour = this.getLocalHour(timezone);
       return localHour >= 9 && localHour <= 21; // 9am - 9pm
     } catch {
       return true;
     }
   },
   
-  // Get traffic multiplier based on time of day
-  getTimeMultiplier: (timezone: string) => {
+  // Get traffic multiplier based on time of day - SAFE VERSION
+  getTimeMultiplier: function(timezone: string): number {
     try {
-      const now = new Date();
-      const localHour = parseInt(now.toLocaleString('en-US', { 
-        timeZone: timezone, 
-        hour: 'numeric', 
-        hour12: false 
-      }));
+      const localHour = this.getLocalHour(timezone);
       
       // Peak hours: 10am-12pm, 2pm-5pm, 7pm-10pm
       if ((localHour >= 10 && localHour <= 12) || 
@@ -553,14 +645,10 @@ const TemporalPatterns = {
     }
   },
   
-  // Weekend vs weekday patterns
-  getWeekendFactor: (timezone: string) => {
+  // Weekend vs weekday patterns - SAFE VERSION
+  getWeekendFactor: function(timezone: string): { isWeekend: boolean; volumeFactor: number; mobileBias: number; sessionLength: number } {
     try {
-      const now = new Date();
-      const day = parseInt(now.toLocaleString('en-US', { 
-        timeZone: timezone, 
-        weekday: 'numeric' // 0=Sunday, 6=Saturday
-      }));
+      const day = this.getLocalDay(timezone); // 0=Sunday, 6=Saturday
       
       if (day === 0 || day === 6) { // Weekend
         return {
@@ -6506,7 +6594,16 @@ const MainContent = () => {
            
            // Update traffic trend for visualization (hit velocity over time)
            const now = Date.now();
-           const timeLabel = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+           // Safe time formatting without Intl.DateTimeFormat options
+           const timeLabel = (() => {
+             try {
+               const d = new Date();
+               const h = d.getHours().toString().padStart(2, '0');
+               const m = d.getMinutes().toString().padStart(2, '0');
+               const s = d.getSeconds().toString().padStart(2, '0');
+               return `${h}:${m}:${s}`;
+             } catch { return '00:00:00'; }
+           })();
            setTrafficTrend(prev => {
              // Keep last 30 data points (about 30 seconds of data in normal mode)
              const updated = [...prev, { time: timeLabel, hits: 1, timestamp: now }];
@@ -6609,7 +6706,12 @@ const MainContent = () => {
            }
            
            // Update temporal stats
-           const currentHour = new Date().toLocaleTimeString('en-US', { hour: '2-digit', hour12: false });
+           // Safe hour formatting without Intl.DateTimeFormat options
+           const currentHour = (() => {
+             try {
+               return new Date().getHours().toString().padStart(2, '0');
+             } catch { return '00'; }
+           })();
            setTemporalStats(prev => {
                const peakHours = [...prev.peakHours];
                if (timeMultiplier > 1.2 && !peakHours.includes(currentHour)) {
