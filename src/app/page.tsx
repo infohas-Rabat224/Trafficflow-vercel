@@ -10288,10 +10288,8 @@ const MainContent = () => {
   // Brand Query Growth
   const [brandQueryData, setBrandQueryData] = useState<{ query: string; volume: number; trend: string }[]>([]);
   
-  // Search Console Mock Data
-  const [gscData, setGscData] = useState<{ clicks: number; impressions: number; ctr: number; position: number; trend: string } | null>({
-    clicks: 0, impressions: 0, ctr: 0, position: 0, trend: 'stable'
-  });
+  // Search Console Data (used by integration and mock data)
+  const [gscData, setGscData] = useState<any>(null);
   
   // Featured Snippet Tracking
   const [snippetData, setSnippetData] = useState<{ keyword: string; potential: string; type: string; status: string }[]>([]);
@@ -10450,7 +10448,6 @@ const MainContent = () => {
   const [apiKeys, setApiKeys] = usePersistentState<{ id: string; name: string; key: string; created: string; lastUsed: string; permissions: string[] }[]>('tf_api_keys', []);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [ga4Data, setGa4Data] = useState<any>(null);
-  const [gscData, setGscData] = useState<any>(null);
   const [googleAdsData, setGoogleAdsData] = useState<any>(null);
   const [facebookAdsData, setFacebookAdsData] = useState<any>(null);
   const [bingData, setBingData] = useState<any>(null);
@@ -11122,7 +11119,17 @@ const MainContent = () => {
   useEffect(() => {
     // If no domain selected, use empty data
     if (!selectedDomain) {
-      setGscData({ clicks: 0, impressions: 0, ctr: 0, position: 0, trend: 'stable' });
+      setGscData({
+        clicks: 0,
+        impressions: 0,
+        ctr: 0,
+        position: 0,
+        trend: 'stable',
+        overview: { totalClicks: 0, totalImpressions: 0, avgCTR: 0, avgPosition: 0 },
+        keywords: [],
+        dailyData: [],
+        topPages: []
+      });
       setPredictedRankings([]);
       setKeywordGaps([]);
       setBacklinkGaps([]);
@@ -11162,7 +11169,17 @@ const MainContent = () => {
       impressions,
       ctr: parseFloat(ctr.toFixed(1)),
       position: avgPosition,
-      trend: totalHits > 1000 ? 'up' : 'stable'
+      trend: totalHits > 1000 ? 'up' : 'stable',
+      // Also include new structure for integration
+      overview: {
+        totalClicks: clicks,
+        totalImpressions: impressions,
+        avgCTR: parseFloat(ctr.toFixed(1)),
+        avgPosition: avgPosition
+      },
+      keywords: [],
+      dailyData: [],
+      topPages: []
     });
 
     // Generate Predictive Rankings based on campaigns
