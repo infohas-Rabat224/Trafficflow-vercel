@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v27-0-enterprise';
+  : 'traffic-flow-v28-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -5192,7 +5192,7 @@ const BotDetectionBypassTesting = {
 // ============================================================
 
 // ============================================================
-// PHASE 8: MONITORING & COMPLIANCE DASHBOARD (v27.0)
+// PHASE 8: MONITORING & COMPLIANCE DASHBOARD (v27.0 - Completed)
 // ============================================================
 
 // --- PHASE 8 TASK 8.1: REAL-TIME SAFETY SCORE ---
@@ -7090,7 +7090,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v27.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v28.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -8246,7 +8246,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v27.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v28.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -10399,22 +10399,72 @@ const MainContent = () => {
   const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   
   // ===== PHASE 6: INTEGRATION HUB =====
-  const [integrations, setIntegrations] = useState<{ name: string; type: string; status: 'connected' | 'disconnected' | 'error'; lastSync: string; data?: any }[]>([
-    { name: 'Google Analytics 4', type: 'analytics', status: 'disconnected', lastSync: '' },
-    { name: 'Google Search Console', type: 'seo', status: 'disconnected', lastSync: '' },
-    { name: 'Google Ads', type: 'ads', status: 'disconnected', lastSync: '' },
-    { name: 'Facebook Ads', type: 'ads', status: 'disconnected', lastSync: '' },
-    { name: 'Bing Webmaster', type: 'seo', status: 'disconnected', lastSync: '' },
-  ]);
-  const [webhooks, setWebhooks] = useState<{ id: string; name: string; url: string; events: string[]; status: string; lastTriggered: string; secret?: string }[]>([]);
-  const [apiKeys, setApiKeys] = useState<{ id: string; name: string; key: string; created: string; lastUsed: string; permissions: string[] }[]>([]);
+  // Persistent integration configurations - stored in localStorage
+  const [integrationConfigs, setIntegrationConfigs] = usePersistentState<{
+    ga4?: { propertyId: string; connectedAt: string };
+    gsc?: { siteUrl: string; connectedAt: string };
+    googleAds?: { customerId: string; connectedAt: string };
+    facebookAds?: { accountId: string; connectedAt: string };
+    bing?: { siteUrl: string; connectedAt: string };
+  }>('tf_integration_configs', {});
+  
+  const [integrations, setIntegrations] = useState<{ name: string; type: string; status: 'connected' | 'disconnected' | 'error'; lastSync: string; data?: any }[]>([]);
+  
+  // Sync integrations state with persisted configs
+  useEffect(() => {
+    setIntegrations([
+      { 
+        name: 'Google Analytics 4', 
+        type: 'analytics', 
+        status: integrationConfigs.ga4 ? 'connected' : 'disconnected', 
+        lastSync: integrationConfigs.ga4?.connectedAt || '' 
+      },
+      { 
+        name: 'Google Search Console', 
+        type: 'seo', 
+        status: integrationConfigs.gsc ? 'connected' : 'disconnected', 
+        lastSync: integrationConfigs.gsc?.connectedAt || '' 
+      },
+      { 
+        name: 'Google Ads', 
+        type: 'ads', 
+        status: integrationConfigs.googleAds ? 'connected' : 'disconnected', 
+        lastSync: integrationConfigs.googleAds?.connectedAt || '' 
+      },
+      { 
+        name: 'Facebook Ads', 
+        type: 'ads', 
+        status: integrationConfigs.facebookAds ? 'connected' : 'disconnected', 
+        lastSync: integrationConfigs.facebookAds?.connectedAt || '' 
+      },
+      { 
+        name: 'Bing Webmaster', 
+        type: 'seo', 
+        status: integrationConfigs.bing ? 'connected' : 'disconnected', 
+        lastSync: integrationConfigs.bing?.connectedAt || '' 
+      },
+    ]);
+  }, [integrationConfigs]);
+  
+  const [webhooks, setWebhooks] = usePersistentState<{ id: string; name: string; url: string; events: string[]; status: string; lastTriggered: string; secret?: string }[]>('tf_webhooks', []);
+  const [apiKeys, setApiKeys] = usePersistentState<{ id: string; name: string; key: string; created: string; lastUsed: string; permissions: string[] }[]>('tf_api_keys', []);
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [ga4Data, setGa4Data] = useState<any>(null);
+  const [gscData, setGscData] = useState<any>(null);
+  const [googleAdsData, setGoogleAdsData] = useState<any>(null);
+  const [facebookAdsData, setFacebookAdsData] = useState<any>(null);
+  const [bingData, setBingData] = useState<any>(null);
   const [integrationLoading, setIntegrationLoading] = useState<string | null>(null);
   const [showGa4Modal, setShowGa4Modal] = useState(false);
   const [showGscModal, setShowGscModal] = useState(false);
+  const [showGoogleAdsModal, setShowGoogleAdsModal] = useState(false);
+  const [showFacebookAdsModal, setShowFacebookAdsModal] = useState(false);
+  const [showBingModal, setShowBingModal] = useState(false);
   const [ga4PropertyId, setGa4PropertyId] = useState('');
   const [gscSiteUrl, setGscSiteUrl] = useState('');
+  const [googleAdsCustomerId, setGoogleAdsCustomerId] = useState('');
+  const [facebookAdsAccountId, setFacebookAdsAccountId] = useState('');
+  const [bingSiteUrl, setBingSiteUrl] = useState('');
   
   // ===== PHASE 7: FINANCIAL INTELLIGENCE =====
   const [budgetData, setBudgetData] = useState<{ campaign: string; allocated: number; spent: number; remaining: number; efficiency: number }[]>([]);
@@ -13128,7 +13178,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v27.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v28.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -13180,7 +13230,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v27.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v28.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -14875,7 +14925,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v27.0
+                        TrafficFlow Enterprise v28.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -15056,7 +15106,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v27.0
+Report generated by TrafficFlow Enterprise v28.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -16042,7 +16092,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v27.0
+                        TrafficFlow Enterprise v28.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
@@ -16576,10 +16626,11 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                               onClick={async () => {
                                 setIntegrationLoading('ga4');
                                 try {
+                                  const propertyId = integrationConfigs.ga4?.propertyId;
                                   const response = await fetch('/api/integrations', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: 'fetch_ga4' })
+                                    body: JSON.stringify({ action: 'fetch_ga4', propertyId })
                                   });
                                   const result = await response.json();
                                   if (result.success) {
@@ -16605,10 +16656,11 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                               onClick={async () => {
                                 setIntegrationLoading('gsc');
                                 try {
+                                  const siteUrl = integrationConfigs.gsc?.siteUrl;
                                   const response = await fetch('/api/integrations', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: 'fetch_gsc' })
+                                    body: JSON.stringify({ action: 'fetch_gsc', siteUrl })
                                   });
                                   const result = await response.json();
                                   if (result.success) {
@@ -16629,22 +16681,108 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                               {integrationLoading === 'gsc' ? 'Loading...' : 'View Data'}
                             </button>
                           )}
+                          {integration.name === 'Google Ads' && (
+                            <button 
+                              onClick={async () => {
+                                setIntegrationLoading('google_ads');
+                                try {
+                                  const customerId = integrationConfigs.googleAds?.customerId;
+                                  const response = await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'fetch_google_ads', customerId })
+                                  });
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    setGoogleAdsData(result.data);
+                                    setShowGoogleAdsModal(true);
+                                    addToast?.('Google Ads data loaded!', 'success');
+                                  } else {
+                                    addToast?.(result.error || 'Failed to fetch data', 'error');
+                                  }
+                                } catch (e) {
+                                  addToast?.('Failed to fetch Google Ads data', 'error');
+                                }
+                                setIntegrationLoading(null);
+                              }}
+                              disabled={integrationLoading === 'google_ads'}
+                              className="flex-1 px-3 py-1.5 bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                            >
+                              {integrationLoading === 'google_ads' ? 'Loading...' : 'View Data'}
+                            </button>
+                          )}
+                          {integration.name === 'Facebook Ads' && (
+                            <button 
+                              onClick={async () => {
+                                setIntegrationLoading('facebook_ads');
+                                try {
+                                  const accountId = integrationConfigs.facebookAds?.accountId;
+                                  const response = await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'fetch_facebook_ads', accountId })
+                                  });
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    setFacebookAdsData(result.data);
+                                    setShowFacebookAdsModal(true);
+                                    addToast?.('Facebook Ads data loaded!', 'success');
+                                  } else {
+                                    addToast?.(result.error || 'Failed to fetch data', 'error');
+                                  }
+                                } catch (e) {
+                                  addToast?.('Failed to fetch Facebook Ads data', 'error');
+                                }
+                                setIntegrationLoading(null);
+                              }}
+                              disabled={integrationLoading === 'facebook_ads'}
+                              className="flex-1 px-3 py-1.5 bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                            >
+                              {integrationLoading === 'facebook_ads' ? 'Loading...' : 'View Data'}
+                            </button>
+                          )}
+                          {integration.name === 'Bing Webmaster' && (
+                            <button 
+                              onClick={async () => {
+                                setIntegrationLoading('bing');
+                                try {
+                                  const siteUrl = integrationConfigs.bing?.siteUrl;
+                                  const response = await fetch('/api/integrations', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ action: 'fetch_bing', siteUrl })
+                                  });
+                                  const result = await response.json();
+                                  if (result.success) {
+                                    setBingData(result.data);
+                                    setShowBingModal(true);
+                                    addToast?.('Bing data loaded!', 'success');
+                                  } else {
+                                    addToast?.(result.error || 'Failed to fetch data', 'error');
+                                  }
+                                } catch (e) {
+                                  addToast?.('Failed to fetch Bing data', 'error');
+                                }
+                                setIntegrationLoading(null);
+                              }}
+                              disabled={integrationLoading === 'bing'}
+                              className="flex-1 px-3 py-1.5 bg-emerald-100 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                            >
+                              {integrationLoading === 'bing' ? 'Loading...' : 'View Data'}
+                            </button>
+                          )}
                           <button 
                             onClick={async () => {
                               if (confirm(`Disconnect ${integration.name}?`)) {
                                 const intKey = integration.name === 'Google Analytics 4' ? 'ga4' : 
                                               integration.name === 'Google Search Console' ? 'gsc' : 
-                                              integration.name.toLowerCase().replace(/\s+/g, '_');
-                                try {
-                                  await fetch('/api/integrations', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ action: 'disconnect', integration: intKey })
-                                  });
-                                } catch (e) {}
-                                setIntegrations(prev => prev.map((int, idx) => 
-                                  idx === i ? { ...int, status: 'disconnected' as const, lastSync: '' } : int
-                                ));
+                                              integration.name === 'Google Ads' ? 'googleAds' :
+                                              integration.name === 'Facebook Ads' ? 'facebookAds' : 'bing';
+                                setIntegrationConfigs(prev => {
+                                  const newConfig = { ...prev };
+                                  delete newConfig[intKey as keyof typeof newConfig];
+                                  return newConfig;
+                                });
                                 addToast?.(`${integration.name} disconnected`, 'info');
                               }
                             }}
@@ -16660,14 +16798,12 @@ ${linkOpportunities.map(o => `- ${o.domain} (DA: ${o.da}) - Type: ${o.type} - St
                               setShowGa4Modal(true);
                             } else if (integration.name === 'Google Search Console') {
                               setShowGscModal(true);
-                            } else {
-                              const apiKey = prompt(`Enter your ${integration.name} API key:`);
-                              if (apiKey) {
-                                setIntegrations(prev => prev.map((int, idx) => 
-                                  idx === i ? { ...int, status: 'connected' as const, lastSync: new Date().toLocaleString() } : int
-                                ));
-                                addToast?.(`${integration.name} connected successfully!`, 'success');
-                              }
+                            } else if (integration.name === 'Google Ads') {
+                              setShowGoogleAdsModal(true);
+                            } else if (integration.name === 'Facebook Ads') {
+                              setShowFacebookAdsModal(true);
+                            } else if (integration.name === 'Bing Webmaster') {
+                              setShowBingModal(true);
                             }
                           }}
                           className="w-full px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-colors"
@@ -20443,11 +20579,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           });
                           const result = await response.json();
                           if (result.success) {
-                            setIntegrations(prev => prev.map(int => 
-                              int.name === 'Google Analytics 4' 
-                                ? { ...int, status: 'connected' as const, lastSync: new Date().toLocaleString() }
-                                : int
-                            ));
+                            setIntegrationConfigs(prev => ({
+                              ...prev,
+                              ga4: result.config
+                            }));
                             setGa4Data(result.data);
                             addToast?.('Google Analytics 4 connected!', 'success');
                           } else {
@@ -20619,11 +20754,10 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                           });
                           const result = await response.json();
                           if (result.success) {
-                            setIntegrations(prev => prev.map(int => 
-                              int.name === 'Google Search Console' 
-                                ? { ...int, status: 'connected' as const, lastSync: new Date().toLocaleString() }
-                                : int
-                            ));
+                            setIntegrationConfigs(prev => ({
+                              ...prev,
+                              gsc: result.config
+                            }));
                             setGscData(result.data);
                             addToast?.('Google Search Console connected!', 'success');
                           } else {
@@ -20708,6 +20842,434 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                         <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
                           <span className="text-xs font-medium truncate">{page.page}</span>
                           <span className="text-xs text-slate-500">{page.clicks} clicks</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Google Ads Connect Modal */}
+      {showGoogleAdsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            {!googleAdsData ? (
+              <>
+                <div className="p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                      <DollarSign size={24} className="text-green-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">Connect Google Ads</h3>
+                      <p className="text-sm text-slate-500">Enter your Google Ads Customer ID</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Customer ID</label>
+                      <input 
+                        type="text" 
+                        value={googleAdsCustomerId}
+                        onChange={(e) => setGoogleAdsCustomerId(e.target.value)}
+                        placeholder="e.g., 123-456-7890"
+                        className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Find your Customer ID in Google Ads top right corner</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3 mt-6">
+                    <button 
+                      onClick={() => {
+                        setShowGoogleAdsModal(false);
+                        setGoogleAdsCustomerId('');
+                      }}
+                      className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!googleAdsCustomerId) {
+                          addToast?.('Please enter a Customer ID', 'error');
+                          return;
+                        }
+                        setIntegrationLoading('google_ads');
+                        try {
+                          const response = await fetch('/api/integrations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'connect_google_ads',
+                              customerId: googleAdsCustomerId
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            setIntegrationConfigs(prev => ({
+                              ...prev,
+                              googleAds: result.config
+                            }));
+                            setGoogleAdsData(result.data);
+                            addToast?.('Google Ads connected!', 'success');
+                          } else {
+                            addToast?.(result.error || 'Connection failed', 'error');
+                          }
+                        } catch (e) {
+                          addToast?.('Connection failed', 'error');
+                        }
+                        setIntegrationLoading(null);
+                      }}
+                      disabled={integrationLoading === 'google_ads'}
+                      className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-colors disabled:opacity-50"
+                    >
+                      {integrationLoading === 'google_ads' ? 'Connecting...' : 'Connect'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-6 border-b bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-3xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <DollarSign size={24} />
+                      <div>
+                        <h3 className="text-lg font-bold">Google Ads</h3>
+                        <p className="text-xs text-white/80">Campaign Performance</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowGoogleAdsModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Overview</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-green-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-green-600">${googleAdsData.overview?.totalSpend?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-slate-500">Total Spend</div>
+                      </div>
+                      <div className="bg-blue-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-blue-600">{googleAdsData.overview?.totalClicks?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-slate-500">Clicks</div>
+                      </div>
+                      <div className="bg-purple-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-purple-600">{googleAdsData.overview?.avgCTR || 0}%</div>
+                        <div className="text-xs text-slate-500">Avg CTR</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Campaigns</h4>
+                    <div className="space-y-2">
+                      {googleAdsData.campaigns?.slice(0, 5).map((campaign: any, i: number) => (
+                        <div key={i} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium">{campaign.name}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded ${campaign.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {campaign.status}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-1">
+                            ${campaign.spend} spend • {campaign.clicks} clicks • {campaign.conversions} conversions
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Facebook Ads Connect Modal */}
+      {showFacebookAdsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            {!facebookAdsData ? (
+              <>
+                <div className="p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                      <DollarSign size={24} className="text-blue-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">Connect Facebook Ads</h3>
+                      <p className="text-sm text-slate-500">Enter your Facebook Ads Account ID</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Account ID</label>
+                      <input 
+                        type="text" 
+                        value={facebookAdsAccountId}
+                        onChange={(e) => setFacebookAdsAccountId(e.target.value)}
+                        placeholder="e.g., act_123456789"
+                        className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Find your Account ID in Facebook Ads Manager</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3 mt-6">
+                    <button 
+                      onClick={() => {
+                        setShowFacebookAdsModal(false);
+                        setFacebookAdsAccountId('');
+                      }}
+                      className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!facebookAdsAccountId) {
+                          addToast?.('Please enter an Account ID', 'error');
+                          return;
+                        }
+                        setIntegrationLoading('facebook_ads');
+                        try {
+                          const response = await fetch('/api/integrations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'connect_facebook_ads',
+                              accountId: facebookAdsAccountId
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            setIntegrationConfigs(prev => ({
+                              ...prev,
+                              facebookAds: result.config
+                            }));
+                            setFacebookAdsData(result.data);
+                            addToast?.('Facebook Ads connected!', 'success');
+                          } else {
+                            addToast?.(result.error || 'Connection failed', 'error');
+                          }
+                        } catch (e) {
+                          addToast?.('Connection failed', 'error');
+                        }
+                        setIntegrationLoading(null);
+                      }}
+                      disabled={integrationLoading === 'facebook_ads'}
+                      className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {integrationLoading === 'facebook_ads' ? 'Connecting...' : 'Connect'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-6 border-b bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-3xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <DollarSign size={24} />
+                      <div>
+                        <h3 className="text-lg font-bold">Facebook Ads</h3>
+                        <p className="text-xs text-white/80">Ad Performance</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowFacebookAdsModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Overview</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-blue-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-blue-600">{facebookAdsData.overview?.totalReach?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-slate-500">Total Reach</div>
+                      </div>
+                      <div className="bg-green-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-green-600">${facebookAdsData.overview?.totalSpend?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-slate-500">Total Spend</div>
+                      </div>
+                      <div className="bg-purple-50 p-4 rounded-xl text-center">
+                        <div className="text-2xl font-black text-purple-600">{facebookAdsData.overview?.totalConversions || 0}</div>
+                        <div className="text-xs text-slate-500">Conversions</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Ad Sets</h4>
+                    <div className="space-y-2">
+                      {facebookAdsData.adSets?.slice(0, 5).map((adSet: any, i: number) => (
+                        <div key={i} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium">{adSet.name}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded ${adSet.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {adSet.status}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 mt-1">
+                            ${adSet.spend} spend • {adSet.reach?.toLocaleString()} reach • {adSet.conversions} conversions
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Bing Webmaster Connect Modal */}
+      {showBingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            {!bingData ? (
+              <>
+                <div className="p-8">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center">
+                      <Search size={24} className="text-cyan-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold">Connect Bing Webmaster</h3>
+                      <p className="text-sm text-slate-500">Enter your verified site URL</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Site URL</label>
+                      <input 
+                        type="text" 
+                        value={bingSiteUrl}
+                        onChange={(e) => setBingSiteUrl(e.target.value)}
+                        placeholder="e.g., https://yourdomain.com"
+                        className="w-full mt-1 p-3 bg-slate-50 border rounded-xl text-sm"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-1">Enter the URL verified in Bing Webmaster Tools</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3 mt-6">
+                    <button 
+                      onClick={() => {
+                        setShowBingModal(false);
+                        setBingSiteUrl('');
+                      }}
+                      className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (!bingSiteUrl) {
+                          addToast?.('Please enter a site URL', 'error');
+                          return;
+                        }
+                        setIntegrationLoading('bing');
+                        try {
+                          const response = await fetch('/api/integrations', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              action: 'connect_bing',
+                              siteUrl: bingSiteUrl
+                            })
+                          });
+                          const result = await response.json();
+                          if (result.success) {
+                            setIntegrationConfigs(prev => ({
+                              ...prev,
+                              bing: result.config
+                            }));
+                            setBingData(result.data);
+                            addToast?.('Bing Webmaster connected!', 'success');
+                          } else {
+                            addToast?.(result.error || 'Connection failed', 'error');
+                          }
+                        } catch (e) {
+                          addToast?.('Connection failed', 'error');
+                        }
+                        setIntegrationLoading(null);
+                      }}
+                      disabled={integrationLoading === 'bing'}
+                      className="flex-1 py-3 bg-cyan-600 text-white rounded-xl font-bold hover:bg-cyan-700 transition-colors disabled:opacity-50"
+                    >
+                      {integrationLoading === 'bing' ? 'Connecting...' : 'Connect'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="p-6 border-b bg-gradient-to-r from-cyan-600 to-teal-600 text-white rounded-t-3xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Search size={24} />
+                      <div>
+                        <h3 className="text-lg font-bold">Bing Webmaster</h3>
+                        <p className="text-xs text-white/80">{bingSiteUrl}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowBingModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  <div className="mb-6">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Overview</h4>
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="bg-cyan-50 p-4 rounded-xl text-center">
+                        <div className="text-xl font-black text-cyan-600">{bingData.overview?.totalImpressions?.toLocaleString() || 0}</div>
+                        <div className="text-[10px] text-slate-500">Impressions</div>
+                      </div>
+                      <div className="bg-green-50 p-4 rounded-xl text-center">
+                        <div className="text-xl font-black text-green-600">{bingData.overview?.totalClicks?.toLocaleString() || 0}</div>
+                        <div className="text-[10px] text-slate-500">Clicks</div>
+                      </div>
+                      <div className="bg-purple-50 p-4 rounded-xl text-center">
+                        <div className="text-xl font-black text-purple-600">{bingData.overview?.avgPosition || 0}</div>
+                        <div className="text-[10px] text-slate-500">Avg Position</div>
+                      </div>
+                      <div className="bg-blue-50 p-4 rounded-xl text-center">
+                        <div className="text-xl font-black text-blue-600">{bingData.overview?.indexedPages || 0}</div>
+                        <div className="text-[10px] text-slate-500">Indexed Pages</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Top Keywords</h4>
+                    <div className="space-y-2">
+                      {bingData.keywords?.slice(0, 5).map((kw: any, i: number) => (
+                        <div key={i} className="p-2 bg-slate-50 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium">{kw.keyword}</span>
+                            <span className="text-[10px] text-slate-500">Position: {kw.avgPosition}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-1">
+                            {kw.impressions} impressions • {kw.clicks} clicks
+                          </div>
                         </div>
                       ))}
                     </div>
