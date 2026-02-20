@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v21-0-enterprise';
+  : 'traffic-flow-v22-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -570,12 +570,38 @@ const HumanBehaviorSimulator = {
   }
 };
 
-// --- MODULE: TEMPORAL PATTERNS ---
+// --- MODULE: TEMPORAL PATTERNS (v22.0 ENHANCED) ---
 const TemporalPatterns = {
-  // Timezone offset map (hours from UTC) - safe calculation without Intl API
+  // Timezone offset map (hours from UTC) - EXPANDED to 60+ countries
   timezoneOffsets: {
-    'America/New_York': -5, 'Europe/London': 0, 'Europe/Berlin': 1, 'Asia/Tokyo': 9,
-    'America/Los_Angeles': -8, 'America/Chicago': -6, 'Europe/Paris': 1, 'UTC': 0
+    // North America
+    'America/New_York': -5, 'America/Chicago': -6, 'America/Denver': -7, 'America/Los_Angeles': -8,
+    'America/Toronto': -5, 'America/Vancouver': -8, 'America/Mexico_City': -6,
+    // South America
+    'America/Sao_Paulo': -3, 'America/Buenos_Aires': -3, 'America/Santiago': -4,
+    'America/Bogota': -5, 'America/Lima': -5, 'America/Caracas': -4,
+    // Europe
+    'Europe/London': 0, 'Europe/Dublin': 0, 'Europe/Lisbon': 0,
+    'Europe/Paris': 1, 'Europe/Berlin': 1, 'Europe/Amsterdam': 1, 'Europe/Brussels': 1,
+    'Europe/Vienna': 1, 'Europe/Zurich': 1, 'Europe/Stockholm': 1, 'Europe/Oslo': 1,
+    'Europe/Copenhagen': 1, 'Europe/Helsinki': 1, 'Europe/Madrid': 1, 'Europe/Rome': 1,
+    'Europe/Warsaw': 1, 'Europe/Prague': 1, 'Europe/Budapest': 1, 'Europe/Bucharest': 2,
+    'Europe/Athens': 2, 'Europe/Istanbul': 3,
+    // Middle East
+    'Asia/Jerusalem': 2, 'Asia/Riyadh': 3, 'Asia/Dubai': 4, 'Asia/Qatar': 3, 'Asia/Kuwait': 3,
+    // Africa
+    'Africa/Johannesburg': 2, 'Africa/Lagos': 1, 'Africa/Cairo': 2, 'Africa/Nairobi': 3,
+    'Africa/Casablanca': 1, 'Africa/Accra': 0,
+    // Asia
+    'Asia/Tokyo': 9, 'Asia/Seoul': 9, 'Asia/Shanghai': 8, 'Asia/Taipei': 8, 'Asia/Hong_Kong': 8,
+    'Asia/Singapore': 8, 'Asia/Kuala_Lumpur': 8, 'Asia/Bangkok': 7, 'Asia/Ho_Chi_Minh': 7,
+    'Asia/Jakarta': 7, 'Asia/Manila': 8, 'Asia/Kolkata': 5.5, 'Asia/Karachi': 5, 'Asia/Dhaka': 6,
+    // Oceania
+    'Australia/Sydney': 11, 'Australia/Melbourne': 11, 'Pacific/Auckland': 13,
+    // Central Asia
+    'Europe/Moscow': 3, 'Europe/Kiev': 2, 'Europe/Minsk': 3, 'Asia/Almaty': 6,
+    // Default
+    'UTC': 0
   },
   
   // Safe local hour calculation (no Intl.DateTimeFormat)
@@ -679,22 +705,92 @@ const TemporalPatterns = {
   getBurstDelay: () => Math.floor(Math.random() * 500) + 200 // 200-700ms between burst hits
 };
 
-// --- MODULE: GEO-SPECIFIC BEHAVIORS ---
+// --- MODULE: GEO-SPECIFIC BEHAVIORS (v22.0 ENHANCED - 60+ COUNTRIES) ---
 const GeoBehaviorPatterns = {
   patterns: {
-    'US': { avgSessionTime: 180000, pagesPerSession: 3.2, mobileRatio: 0.55, bounceRate: 0.42 },
-    'GB': { avgSessionTime: 165000, pagesPerSession: 3.0, mobileRatio: 0.52, bounceRate: 0.44 },
-    'DE': { avgSessionTime: 195000, pagesPerSession: 3.5, mobileRatio: 0.48, bounceRate: 0.40 },
-    'FR': { avgSessionTime: 170000, pagesPerSession: 2.8, mobileRatio: 0.50, bounceRate: 0.45 },
-    'JP': { avgSessionTime: 210000, pagesPerSession: 4.0, mobileRatio: 0.70, bounceRate: 0.38 },
-    'CN': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.85, bounceRate: 0.50 },
-    'AU': { avgSessionTime: 185000, pagesPerSession: 3.3, mobileRatio: 0.58, bounceRate: 0.41 },
-    'IN': { avgSessionTime: 140000, pagesPerSession: 2.2, mobileRatio: 0.80, bounceRate: 0.52 }
+    // North America
+    'US': { avgSessionTime: 180000, pagesPerSession: 3.2, mobileRatio: 0.55, bounceRate: 0.42, searchEngine: 'google', language: 'en' },
+    'CA': { avgSessionTime: 175000, pagesPerSession: 3.1, mobileRatio: 0.53, bounceRate: 0.43, searchEngine: 'google', language: 'en' },
+    'MX': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.65, bounceRate: 0.46, searchEngine: 'google', language: 'es' },
+    // South America
+    'BR': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.60, bounceRate: 0.45, searchEngine: 'google', language: 'pt' },
+    'AR': { avgSessionTime: 165000, pagesPerSession: 2.7, mobileRatio: 0.62, bounceRate: 0.47, searchEngine: 'google', language: 'es' },
+    'CL': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.58, bounceRate: 0.44, searchEngine: 'google', language: 'es' },
+    'CO': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.63, bounceRate: 0.46, searchEngine: 'google', language: 'es' },
+    'PE': { avgSessionTime: 155000, pagesPerSession: 2.6, mobileRatio: 0.64, bounceRate: 0.48, searchEngine: 'google', language: 'es' },
+    'VE': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.68, bounceRate: 0.50, searchEngine: 'google', language: 'es' },
+    // Europe - Western
+    'GB': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.52, bounceRate: 0.44, searchEngine: 'google', language: 'en' },
+    'IE': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.54, bounceRate: 0.45, searchEngine: 'google', language: 'en' },
+    'FR': { avgSessionTime: 170000, pagesPerSession: 2.8, mobileRatio: 0.50, bounceRate: 0.45, searchEngine: 'google', language: 'fr' },
+    'DE': { avgSessionTime: 195000, pagesPerSession: 3.5, mobileRatio: 0.48, bounceRate: 0.40, searchEngine: 'google', language: 'de' },
+    'NL': { avgSessionTime: 185000, pagesPerSession: 3.3, mobileRatio: 0.49, bounceRate: 0.42, searchEngine: 'google', language: 'nl' },
+    'BE': { avgSessionTime: 180000, pagesPerSession: 3.1, mobileRatio: 0.51, bounceRate: 0.43, searchEngine: 'google', language: 'nl' },
+    'AT': { avgSessionTime: 190000, pagesPerSession: 3.4, mobileRatio: 0.47, bounceRate: 0.41, searchEngine: 'google', language: 'de' },
+    'CH': { avgSessionTime: 200000, pagesPerSession: 3.6, mobileRatio: 0.46, bounceRate: 0.39, searchEngine: 'google', language: 'de' },
+    'ES': { avgSessionTime: 165000, pagesPerSession: 2.9, mobileRatio: 0.55, bounceRate: 0.46, searchEngine: 'google', language: 'es' },
+    'PT': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.57, bounceRate: 0.47, searchEngine: 'google', language: 'pt' },
+    'IT': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.54, bounceRate: 0.44, searchEngine: 'google', language: 'it' },
+    // Europe - Northern
+    'SE': { avgSessionTime: 195000, pagesPerSession: 3.4, mobileRatio: 0.50, bounceRate: 0.41, searchEngine: 'google', language: 'sv' },
+    'NO': { avgSessionTime: 200000, pagesPerSession: 3.5, mobileRatio: 0.49, bounceRate: 0.40, searchEngine: 'google', language: 'no' },
+    'DK': { avgSessionTime: 190000, pagesPerSession: 3.3, mobileRatio: 0.51, bounceRate: 0.42, searchEngine: 'google', language: 'da' },
+    'FI': { avgSessionTime: 185000, pagesPerSession: 3.2, mobileRatio: 0.52, bounceRate: 0.43, searchEngine: 'google', language: 'fi' },
+    // Europe - Eastern
+    'PL': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.58, bounceRate: 0.45, searchEngine: 'google', language: 'pl' },
+    'CZ': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.56, bounceRate: 0.44, searchEngine: 'google', language: 'cs' },
+    'RO': { avgSessionTime: 165000, pagesPerSession: 2.8, mobileRatio: 0.60, bounceRate: 0.46, searchEngine: 'google', language: 'ro' },
+    'HU': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.59, bounceRate: 0.45, searchEngine: 'google', language: 'hu' },
+    'GR': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.62, bounceRate: 0.47, searchEngine: 'google', language: 'el' },
+    'TR': { avgSessionTime: 155000, pagesPerSession: 2.6, mobileRatio: 0.65, bounceRate: 0.48, searchEngine: 'google', language: 'tr' },
+    'UA': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.67, bounceRate: 0.49, searchEngine: 'google', language: 'uk' },
+    'RU': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.55, bounceRate: 0.47, searchEngine: 'yandex', language: 'ru' },
+    // Middle East
+    'IL': { avgSessionTime: 185000, pagesPerSession: 3.2, mobileRatio: 0.52, bounceRate: 0.43, searchEngine: 'google', language: 'he' },
+    'SA': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.70, bounceRate: 0.46, searchEngine: 'google', language: 'ar' },
+    'AE': { avgSessionTime: 190000, pagesPerSession: 3.3, mobileRatio: 0.58, bounceRate: 0.42, searchEngine: 'google', language: 'ar' },
+    'QA': { avgSessionTime: 195000, pagesPerSession: 3.4, mobileRatio: 0.56, bounceRate: 0.41, searchEngine: 'google', language: 'ar' },
+    'KW': { avgSessionTime: 185000, pagesPerSession: 3.1, mobileRatio: 0.60, bounceRate: 0.43, searchEngine: 'google', language: 'ar' },
+    // Africa
+    'ZA': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.65, bounceRate: 0.47, searchEngine: 'google', language: 'en' },
+    'NG': { avgSessionTime: 130000, pagesPerSession: 2.2, mobileRatio: 0.80, bounceRate: 0.52, searchEngine: 'google', language: 'en' },
+    'EG': { avgSessionTime: 140000, pagesPerSession: 2.3, mobileRatio: 0.75, bounceRate: 0.50, searchEngine: 'google', language: 'ar' },
+    'KE': { avgSessionTime: 135000, pagesPerSession: 2.2, mobileRatio: 0.78, bounceRate: 0.51, searchEngine: 'google', language: 'en' },
+    'MA': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.72, bounceRate: 0.49, searchEngine: 'google', language: 'ar' },
+    'GH': { avgSessionTime: 125000, pagesPerSession: 2.0, mobileRatio: 0.82, bounceRate: 0.53, searchEngine: 'google', language: 'en' },
+    // Asia - East
+    'JP': { avgSessionTime: 210000, pagesPerSession: 4.0, mobileRatio: 0.70, bounceRate: 0.38, searchEngine: 'google', language: 'ja' },
+    'KR': { avgSessionTime: 200000, pagesPerSession: 3.8, mobileRatio: 0.68, bounceRate: 0.39, searchEngine: 'naver', language: 'ko' },
+    'CN': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.85, bounceRate: 0.50, searchEngine: 'baidu', language: 'zh' },
+    'TW': { avgSessionTime: 195000, pagesPerSession: 3.5, mobileRatio: 0.66, bounceRate: 0.40, searchEngine: 'google', language: 'zh' },
+    'HK': { avgSessionTime: 190000, pagesPerSession: 3.4, mobileRatio: 0.64, bounceRate: 0.41, searchEngine: 'google', language: 'zh' },
+    // Asia - Southeast
+    'SG': { avgSessionTime: 185000, pagesPerSession: 3.3, mobileRatio: 0.62, bounceRate: 0.42, searchEngine: 'google', language: 'en' },
+    'MY': { avgSessionTime: 170000, pagesPerSession: 3.0, mobileRatio: 0.68, bounceRate: 0.44, searchEngine: 'google', language: 'en' },
+    'TH': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.72, bounceRate: 0.46, searchEngine: 'google', language: 'th' },
+    'VN': { avgSessionTime: 155000, pagesPerSession: 2.6, mobileRatio: 0.75, bounceRate: 0.47, searchEngine: 'google', language: 'vi' },
+    'ID': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.78, bounceRate: 0.48, searchEngine: 'google', language: 'id' },
+    'PH': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.80, bounceRate: 0.49, searchEngine: 'google', language: 'en' },
+    // Asia - South
+    'IN': { avgSessionTime: 140000, pagesPerSession: 2.2, mobileRatio: 0.80, bounceRate: 0.52, searchEngine: 'google', language: 'en' },
+    'PK': { avgSessionTime: 130000, pagesPerSession: 2.0, mobileRatio: 0.85, bounceRate: 0.54, searchEngine: 'google', language: 'en' },
+    'BD': { avgSessionTime: 120000, pagesPerSession: 1.9, mobileRatio: 0.88, bounceRate: 0.55, searchEngine: 'google', language: 'bn' },
+    // Oceania
+    'AU': { avgSessionTime: 185000, pagesPerSession: 3.3, mobileRatio: 0.58, bounceRate: 0.41, searchEngine: 'google', language: 'en' },
+    'NZ': { avgSessionTime: 190000, pagesPerSession: 3.4, mobileRatio: 0.56, bounceRate: 0.40, searchEngine: 'google', language: 'en' },
+    // Central Asia
+    'KZ': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.70, bounceRate: 0.48, searchEngine: 'google', language: 'ru' },
+    'BY': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.68, bounceRate: 0.47, searchEngine: 'google', language: 'ru' }
   },
   
   getPattern: (countryCode: string) => {
     return GeoBehaviorPatterns.patterns[countryCode] || 
            GeoBehaviorPatterns.patterns['US'];
+  },
+  
+  // Get all supported countries
+  getSupportedCountries: (): string[] => {
+    return Object.keys(GeoBehaviorPatterns.patterns);
   }
 };
 
@@ -874,6 +970,477 @@ const generateLongTailKeyword = (seed: string): string => {
 
 // ============================================================
 // END ENHANCED MODULES
+// ============================================================
+
+// ============================================================
+// PHASE 2: ADVANCED TRAFFIC REALISM ENGINE (v22.0)
+// ============================================================
+
+// --- PHASE 2 TASK 1: IP ROTATION & COOLING SYSTEM ---
+interface IPRecord {
+  ip: string;
+  countryCode: string;
+  lastUsed: number;
+  usageCount: number;
+  reliability: number; // 0-1 score
+  ispType: 'residential' | 'mobile' | 'business' | 'datacenter';
+}
+
+const IPRotationManager = {
+  // IP Pool with tracking
+  ipPool: new Map<string, IPRecord>(),
+  
+  // Cooling queue (IPs waiting to be reused)
+  coolingQueue: new Map<string, number>(),
+  
+  // Cooling period: 30-60 minutes in milliseconds
+  minCoolingPeriod: 30 * 60 * 1000,  // 30 minutes
+  maxCoolingPeriod: 60 * 60 * 1000,  // 60 minutes
+  
+  // Maximum IPs per country for geographic consistency
+  maxIPsPerCountry: 50,
+  
+  // Generate a mock IP address for a country
+  generateMockIP: (countryCode: string): string => {
+    // Generate realistic IP ranges based on country
+    const countryIPRanges: Record<string, [number, number, number, number]> = {
+      'US': [8, 50, 0, 255], 'GB': [2, 94, 0, 255], 'DE': [2, 92, 0, 255],
+      'FR': [2, 93, 0, 255], 'JP': [1, 126, 0, 255], 'AU': [1, 138, 0, 255],
+      'CA': [24, 99, 0, 255], 'IN': [14, 106, 0, 255], 'BR': [143, 200, 0, 255],
+      'MX': [132, 189, 0, 255], 'NL': [2, 95, 0, 255], 'ES': [2, 88, 0, 255],
+      'IT': [2, 91, 0, 255], 'RU': [5, 195, 0, 255], 'CN': [1, 126, 0, 255],
+      'KR': [1, 118, 0, 255], 'SG': [1, 137, 0, 255], 'HK': [1, 119, 0, 255],
+      'TW': [1, 120, 0, 255], 'ID': [36, 182, 0, 255], 'TH': [1, 46, 0, 255],
+      'MY': [1, 32, 0, 255], 'PH': [49, 124, 0, 255], 'VN': [14, 161, 0, 255],
+      'PL': [5, 94, 0, 255], 'SE': [2, 90, 0, 255], 'NO': [5, 95, 0, 255],
+      'DK': [2, 89, 0, 255], 'FI': [2, 86, 0, 255], 'BE': [2, 87, 0, 255],
+      'AT': [5, 92, 0, 255], 'CH': [5, 93, 0, 255], 'PT': [5, 96, 0, 255],
+      'IE': [2, 84, 0, 255], 'CZ': [2, 85, 0, 255], 'RO': [5, 97, 0, 255],
+      'HU': [5, 98, 0, 255], 'GR': [5, 99, 0, 255], 'TR': [5, 100, 0, 255],
+      'IL': [5, 101, 0, 255], 'SA': [5, 102, 0, 255], 'AE': [5, 103, 0, 255],
+      'ZA': [41, 197, 0, 255], 'NG': [41, 199, 0, 255], 'EG': [41, 196, 0, 255],
+      'AR': [24, 152, 0, 255], 'CL': [24, 152, 0, 255], 'CO': [24, 152, 0, 255],
+      'PE': [24, 152, 0, 255], 'VE': [24, 152, 0, 255], 'NZ': [1, 140, 0, 255]
+    };
+    
+    const range = countryIPRanges[countryCode] || [1, 255, 0, 255];
+    const a = range[0] + Math.floor(Math.random() * (range[1] - range[0]));
+    const b = Math.floor(Math.random() * 256);
+    const c = range[2] + Math.floor(Math.random() * (range[3] - range[2]));
+    const d = Math.floor(Math.random() * 256);
+    
+    return `${a}.${b}.${c}.${d}`;
+  },
+  
+  // Get cooling period (randomized between 30-60 minutes)
+  getCoolingPeriod: (): number => {
+    return IPRotationManager.minCoolingPeriod + 
+           Math.random() * (IPRotationManager.maxCoolingPeriod - IPRotationManager.minCoolingPeriod);
+  },
+  
+  // Check if an IP is in cooling period
+  isInCooling: (ip: string): boolean => {
+    const coolingEndTime = IPRotationManager.coolingQueue.get(ip);
+    if (!coolingEndTime) return false;
+    if (Date.now() >= coolingEndTime) {
+      IPRotationManager.coolingQueue.delete(ip);
+      return false;
+    }
+    return true;
+  },
+  
+  // Get available IPs for a country (not in cooling)
+  getAvailableIPs: (countryCode: string): IPRecord[] => {
+    const available: IPRecord[] = [];
+    IPRotationManager.ipPool.forEach((record, ip) => {
+      if (record.countryCode === countryCode && !IPRotationManager.isInCooling(ip)) {
+        available.push(record);
+      }
+    });
+    return available.sort((a, b) => {
+      // Sort by priority: freshness, usage count, reliability
+      const scoreA = (Date.now() - a.lastUsed) / 60000 - a.usageCount * 0.5 + a.reliability * 10;
+      const scoreB = (Date.now() - b.lastUsed) / 60000 - b.usageCount * 0.5 + b.reliability * 10;
+      return scoreB - scoreA;
+    });
+  },
+  
+  // Get or create an IP for a session
+  getIPForSession: (countryCode: string, ispType: 'residential' | 'mobile' | 'business' | 'datacenter' = 'residential'): IPRecord => {
+    const availableIPs = IPRotationManager.getAvailableIPs(countryCode)
+      .filter(ip => ip.ispType === ispType);
+    
+    if (availableIPs.length > 0) {
+      const selected = availableIPs[0];
+      selected.lastUsed = Date.now();
+      selected.usageCount++;
+      // Put it in cooling
+      IPRotationManager.coolingQueue.set(selected.ip, Date.now() + IPRotationManager.getCoolingPeriod());
+      return selected;
+    }
+    
+    // Create new IP
+    const newIP = IPRotationManager.generateMockIP(countryCode);
+    const newRecord: IPRecord = {
+      ip: newIP,
+      countryCode,
+      lastUsed: Date.now(),
+      usageCount: 1,
+      reliability: 0.8 + Math.random() * 0.2,
+      ispType
+    };
+    
+    IPRotationManager.ipPool.set(newIP, newRecord);
+    IPRotationManager.coolingQueue.set(newIP, Date.now() + IPRotationManager.getCoolingPeriod());
+    
+    return newRecord;
+  },
+  
+  // Get statistics
+  getStats: () => {
+    let totalIPs = IPRotationManager.ipPool.size;
+    let coolingIPs = IPRotationManager.coolingQueue.size;
+    let availableIPs = totalIPs - coolingIPs;
+    
+    return { totalIPs, coolingIPs, availableIPs };
+  },
+  
+  // Clean old entries
+  cleanupOldEntries: () => {
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    IPRotationManager.ipPool.forEach((record, ip) => {
+      if (record.lastUsed < oneDayAgo && !IPRotationManager.isInCooling(ip)) {
+        IPRotationManager.ipPool.delete(ip);
+      }
+    });
+  }
+};
+
+// --- PHASE 2 TASK 2: ISP DIVERSITY SIMULATION ---
+const ISPSimulator = {
+  // ISP Types with characteristics
+  ispTypes: {
+    residential: {
+      name: 'Residential',
+      percentage: 55, // 55% of traffic
+      avgSpeed: '100 Mbps',
+      latency: { min: 10, max: 50 },
+      reliability: 0.95,
+      sessionBehavior: {
+        avgDuration: 180000, // 3 minutes
+        scrollSpeed: 'medium',
+        interactionRate: 0.7
+      }
+    },
+    mobile: {
+      name: 'Mobile (4G/5G)',
+      percentage: 35, // 35% of traffic
+      avgSpeed: '50 Mbps',
+      latency: { min: 30, max: 100 },
+      reliability: 0.85,
+      sessionBehavior: {
+        avgDuration: 120000, // 2 minutes
+        scrollSpeed: 'fast',
+        interactionRate: 0.5
+      }
+    },
+    business: {
+      name: 'Business/Enterprise',
+      percentage: 8, // 8% of traffic
+      avgSpeed: '500 Mbps',
+      latency: { min: 5, max: 20 },
+      reliability: 0.99,
+      sessionBehavior: {
+        avgDuration: 240000, // 4 minutes
+        scrollSpeed: 'slow',
+        interactionRate: 0.85
+      }
+    },
+    datacenter: {
+      name: 'Datacenter',
+      percentage: 2, // 2% of traffic (should be minimal for realism)
+      avgSpeed: '1 Gbps',
+      latency: { min: 1, max: 10 },
+      reliability: 0.99,
+      sessionBehavior: {
+        avgDuration: 90000, // 1.5 minutes
+        scrollSpeed: 'fast',
+        interactionRate: 0.3
+      }
+    }
+  },
+  
+  // Mobile carriers by country
+  mobileCarriers: {
+    'US': ['Verizon', 'AT&T', 'T-Mobile', 'Sprint'],
+    'GB': ['EE', 'Vodafone UK', 'O2', 'Three'],
+    'DE': ['Telekom', 'Vodafone DE', 'O2 DE', '1&1'],
+    'FR': ['Orange', 'SFR', 'Bouygues', 'Free Mobile'],
+    'JP': ['NTT Docomo', 'KDDI', 'SoftBank', 'Rakuten Mobile'],
+    'AU': ['Telstra', 'Optus', 'Vodafone AU', 'TPG'],
+    'CA': ['Bell', 'Rogers', 'Telus', 'Freedom'],
+    'IN': ['Jio', 'Airtel', 'Vi', 'BSNL'],
+    'BR': ['Claro', 'Vivo', 'TIM', 'Oi'],
+    'MX': ['Telcel', 'AT&T MX', 'Movistar', 'Altan'],
+    'CN': ['China Mobile', 'China Unicom', 'China Telecom'],
+    'KR': ['SK Telecom', 'KT', 'LG U+'],
+    'DEFAULT': ['Carrier']
+  },
+  
+  // Network types with characteristics
+  networkTypes: {
+    wifi: {
+      name: 'WiFi',
+      percentage: 60,
+      avgLatency: 15,
+      jitter: 5
+    },
+    '4g': {
+      name: '4G LTE',
+      percentage: 30,
+      avgLatency: 45,
+      jitter: 15
+    },
+    '5g': {
+      name: '5G',
+      percentage: 10,
+      avgLatency: 20,
+      jitter: 8
+    }
+  },
+  
+  // Select ISP type based on realistic distribution
+  selectISPType: (): 'residential' | 'mobile' | 'business' | 'datacenter' => {
+    const rand = Math.random() * 100;
+    if (rand < 55) return 'residential';
+    if (rand < 90) return 'mobile';
+    if (rand < 98) return 'business';
+    return 'datacenter';
+  },
+  
+  // Select network type based on ISP type
+  selectNetworkType: (ispType: string): 'wifi' | '4g' | '5g' => {
+    if (ispType === 'mobile') {
+      const rand = Math.random();
+      if (rand < 0.25) return '5g';  // 25% 5G
+      return '4g';                   // 75% 4G
+    }
+    return 'wifi'; // Residential, business, datacenter use WiFi
+  },
+  
+  // Get carrier for country
+  getCarrier: (countryCode: string): string => {
+    const carriers = ISPSimulator.mobileCarriers[countryCode] || ISPSimulator.mobileCarriers['DEFAULT'];
+    return carriers[Math.floor(Math.random() * carriers.length)];
+  },
+  
+  // Get ISP-specific behavior modifiers
+  getBehaviorModifiers: (ispType: string) => {
+    const type = ISPSimulator.ispTypes[ispType as keyof typeof ISPSimulator.ispTypes];
+    return {
+      sessionDuration: type.sessionBehavior.avgDuration,
+      scrollSpeed: type.sessionBehavior.scrollSpeed,
+      interactionRate: type.sessionBehavior.interactionRate,
+      latency: type.latency.min + Math.random() * (type.latency.max - type.latency.min)
+    };
+  },
+  
+  // Generate full ISP profile for a session
+  generateISPProfile: (countryCode: string) => {
+    const ispType = ISPSimulator.selectISPType();
+    const networkType = ISPSimulator.selectNetworkType(ispType);
+    const carrier = ispType === 'mobile' ? ISPSimulator.getCarrier(countryCode) : null;
+    const behavior = ISPSimulator.getBehaviorModifiers(ispType);
+    
+    return {
+      ispType,
+      ispName: ISPSimulator.ispTypes[ispType as keyof typeof ISPSimulator.ispTypes].name,
+      networkType,
+      carrier,
+      ...behavior
+    };
+  }
+};
+
+// --- PHASE 2 TASK 3: EXPANDED GEOGRAPHIC DATABASE (60+ COUNTRIES) ---
+
+// Extended timezone offsets for 60+ countries
+const ExtendedTimezoneOffsets: Record<string, number> = {
+  // North America
+  'US': -5, 'CA': -5, 'MX': -6,
+  // South America
+  'BR': -3, 'AR': -3, 'CL': -4, 'CO': -5, 'PE': -5, 'VE': -4,
+  // Europe
+  'GB': 0, 'IE': 0, 'PT': 0,
+  'FR': 1, 'DE': 1, 'BE': 1, 'NL': 1, 'AT': 1, 'CH': 1, 'SE': 1, 'NO': 1, 'DK': 1, 'FI': 1,
+  'ES': 1, 'IT': 1, 'GR': 2, 'TR': 3, 'PL': 1, 'CZ': 1, 'RO': 2, 'HU': 1,
+  // Middle East
+  'IL': 2, 'SA': 3, 'AE': 4, 'QA': 3, 'KW': 3,
+  // Africa
+  'ZA': 2, 'NG': 1, 'EG': 2, 'KE': 3, 'MA': 1, 'GH': 0,
+  // Asia
+  'JP': 9, 'KR': 9, 'CN': 8, 'TW': 8, 'HK': 8,
+  'SG': 8, 'MY': 8, 'TH': 7, 'VN': 7, 'ID': 7, 'PH': 8,
+  'IN': 5.5, 'PK': 5, 'BD': 6,
+  // Oceania
+  'AU': 11, 'NZ': 13,
+  // Additional countries
+  'RU': 3, 'UA': 2, 'BY': 3, 'KZ': 6,
+  'NG': 1, 'AR': -3, 'CL': -4, 'CO': -5
+};
+
+// Extended GeoBehaviorPatterns for 60+ countries
+const ExtendedGeoBehaviorPatterns = {
+  patterns: {
+    // North America
+    'US': { avgSessionTime: 180000, pagesPerSession: 3.2, mobileRatio: 0.55, bounceRate: 0.42, searchEngine: 'google', language: 'en' },
+    'CA': { avgSessionTime: 175000, pagesPerSession: 3.1, mobileRatio: 0.53, bounceRate: 0.43, searchEngine: 'google', language: 'en' },
+    'MX': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.65, bounceRate: 0.46, searchEngine: 'google', language: 'es' },
+    // South America
+    'BR': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.60, bounceRate: 0.45, searchEngine: 'google', language: 'pt' },
+    'AR': { avgSessionTime: 165000, pagesPerSession: 2.7, mobileRatio: 0.62, bounceRate: 0.47, searchEngine: 'google', language: 'es' },
+    'CL': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.58, bounceRate: 0.44, searchEngine: 'google', language: 'es' },
+    'CO': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.63, bounceRate: 0.46, searchEngine: 'google', language: 'es' },
+    'PE': { avgSessionTime: 155000, pagesPerSession: 2.6, mobileRatio: 0.64, bounceRate: 0.48, searchEngine: 'google', language: 'es' },
+    'VE': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.68, bounceRate: 0.50, searchEngine: 'google', language: 'es' },
+    // Europe - Western
+    'GB': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.52, bounceRate: 0.44, searchEngine: 'google', language: 'en' },
+    'IE': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.54, bounceRate: 0.45, searchEngine: 'google', language: 'en' },
+    'FR': { avgSessionTime: 170000, pagesPerSession: 2.8, mobileRatio: 0.50, bounceRate: 0.45, searchEngine: 'google', language: 'fr' },
+    'DE': { avgSessionTime: 195000, pagesPerSession: 3.5, mobileRatio: 0.48, bounceRate: 0.40, searchEngine: 'google', language: 'de' },
+    'NL': { avgSessionTime: 185000, pagesPerSession: 3.3, mobileRatio: 0.49, bounceRate: 0.42, searchEngine: 'google', language: 'nl' },
+    'BE': { avgSessionTime: 180000, pagesPerSession: 3.1, mobileRatio: 0.51, bounceRate: 0.43, searchEngine: 'google', language: 'nl' },
+    'AT': { avgSessionTime: 190000, pagesPerSession: 3.4, mobileRatio: 0.47, bounceRate: 0.41, searchEngine: 'google', language: 'de' },
+    'CH': { avgSessionTime: 200000, pagesPerSession: 3.6, mobileRatio: 0.46, bounceRate: 0.39, searchEngine: 'google', language: 'de' },
+    'ES': { avgSessionTime: 165000, pagesPerSession: 2.9, mobileRatio: 0.55, bounceRate: 0.46, searchEngine: 'google', language: 'es' },
+    'PT': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.57, bounceRate: 0.47, searchEngine: 'google', language: 'pt' },
+    'IT': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.54, bounceRate: 0.44, searchEngine: 'google', language: 'it' },
+    // Europe - Northern
+    'SE': { avgSessionTime: 195000, pagesPerSession: 3.4, mobileRatio: 0.50, bounceRate: 0.41, searchEngine: 'google', language: 'sv' },
+    'NO': { avgSessionTime: 200000, pagesPerSession: 3.5, mobileRatio: 0.49, bounceRate: 0.40, searchEngine: 'google', language: 'no' },
+    'DK': { avgSessionTime: 190000, pagesPerSession: 3.3, mobileRatio: 0.51, bounceRate: 0.42, searchEngine: 'google', language: 'da' },
+    'FI': { avgSessionTime: 185000, pagesPerSession: 3.2, mobileRatio: 0.52, bounceRate: 0.43, searchEngine: 'google', language: 'fi' },
+    // Europe - Eastern
+    'PL': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.58, bounceRate: 0.45, searchEngine: 'google', language: 'pl' },
+    'CZ': { avgSessionTime: 175000, pagesPerSession: 3.0, mobileRatio: 0.56, bounceRate: 0.44, searchEngine: 'google', language: 'cs' },
+    'RO': { avgSessionTime: 165000, pagesPerSession: 2.8, mobileRatio: 0.60, bounceRate: 0.46, searchEngine: 'google', language: 'ro' },
+    'HU': { avgSessionTime: 170000, pagesPerSession: 2.9, mobileRatio: 0.59, bounceRate: 0.45, searchEngine: 'google', language: 'hu' },
+    'GR': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.62, bounceRate: 0.47, searchEngine: 'google', language: 'el' },
+    'TR': { avgSessionTime: 155000, pagesPerSession: 2.6, mobileRatio: 0.65, bounceRate: 0.48, searchEngine: 'google', language: 'tr' },
+    'UA': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.67, bounceRate: 0.49, searchEngine: 'google', language: 'uk' },
+    'RU': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.55, bounceRate: 0.47, searchEngine: 'yandex', language: 'ru' },
+    // Middle East
+    'IL': { avgSessionTime: 185000, pagesPerSession: 3.2, mobileRatio: 0.52, bounceRate: 0.43, searchEngine: 'google', language: 'he' },
+    'SA': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.70, bounceRate: 0.46, searchEngine: 'google', language: 'ar' },
+    'AE': { avgSessionTime: 190000, pagesPerSession: 3.3, mobileRatio: 0.58, bounceRate: 0.42, searchEngine: 'google', language: 'ar' },
+    'QA': { avgSessionTime: 195000, pagesPerSession: 3.4, mobileRatio: 0.56, bounceRate: 0.41, searchEngine: 'google', language: 'ar' },
+    'KW': { avgSessionTime: 185000, pagesPerSession: 3.1, mobileRatio: 0.60, bounceRate: 0.43, searchEngine: 'google', language: 'ar' },
+    // Africa
+    'ZA': { avgSessionTime: 160000, pagesPerSession: 2.7, mobileRatio: 0.65, bounceRate: 0.47, searchEngine: 'google', language: 'en' },
+    'NG': { avgSessionTime: 130000, pagesPerSession: 2.2, mobileRatio: 0.80, bounceRate: 0.52, searchEngine: 'google', language: 'en' },
+    'EG': { avgSessionTime: 140000, pagesPerSession: 2.3, mobileRatio: 0.75, bounceRate: 0.50, searchEngine: 'google', language: 'ar' },
+    'KE': { avgSessionTime: 135000, pagesPerSession: 2.2, mobileRatio: 0.78, bounceRate: 0.51, searchEngine: 'google', language: 'en' },
+    'MA': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.72, bounceRate: 0.49, searchEngine: 'google', language: 'ar' },
+    'GH': { avgSessionTime: 125000, pagesPerSession: 2.0, mobileRatio: 0.82, bounceRate: 0.53, searchEngine: 'google', language: 'en' },
+    // Asia - East
+    'JP': { avgSessionTime: 210000, pagesPerSession: 4.0, mobileRatio: 0.70, bounceRate: 0.38, searchEngine: 'google', language: 'ja' },
+    'KR': { avgSessionTime: 200000, pagesPerSession: 3.8, mobileRatio: 0.68, bounceRate: 0.39, searchEngine: 'naver', language: 'ko' },
+    'CN': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.85, bounceRate: 0.50, searchEngine: 'baidu', language: 'zh' },
+    'TW': { avgSessionTime: 195000, pagesPerSession: 3.5, mobileRatio: 0.66, bounceRate: 0.40, searchEngine: 'google', language: 'zh' },
+    'HK': { avgSessionTime: 190000, pagesPerSession: 3.4, mobileRatio: 0.64, bounceRate: 0.41, searchEngine: 'google', language: 'zh' },
+    // Asia - Southeast
+    'SG': { avgSessionTime: 185000, pagesPerSession: 3.3, mobileRatio: 0.62, bounceRate: 0.42, searchEngine: 'google', language: 'en' },
+    'MY': { avgSessionTime: 170000, pagesPerSession: 3.0, mobileRatio: 0.68, bounceRate: 0.44, searchEngine: 'google', language: 'en' },
+    'TH': { avgSessionTime: 160000, pagesPerSession: 2.8, mobileRatio: 0.72, bounceRate: 0.46, searchEngine: 'google', language: 'th' },
+    'VN': { avgSessionTime: 155000, pagesPerSession: 2.6, mobileRatio: 0.75, bounceRate: 0.47, searchEngine: 'google', language: 'vi' },
+    'ID': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.78, bounceRate: 0.48, searchEngine: 'google', language: 'id' },
+    'PH': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.80, bounceRate: 0.49, searchEngine: 'google', language: 'en' },
+    // Asia - South
+    'IN': { avgSessionTime: 140000, pagesPerSession: 2.2, mobileRatio: 0.80, bounceRate: 0.52, searchEngine: 'google', language: 'en' },
+    'PK': { avgSessionTime: 130000, pagesPerSession: 2.0, mobileRatio: 0.85, bounceRate: 0.54, searchEngine: 'google', language: 'en' },
+    'BD': { avgSessionTime: 120000, pagesPerSession: 1.9, mobileRatio: 0.88, bounceRate: 0.55, searchEngine: 'google', language: 'bn' },
+    // Oceania
+    'AU': { avgSessionTime: 185000, pagesPerSession: 3.3, mobileRatio: 0.58, bounceRate: 0.41, searchEngine: 'google', language: 'en' },
+    'NZ': { avgSessionTime: 190000, pagesPerSession: 3.4, mobileRatio: 0.56, bounceRate: 0.40, searchEngine: 'google', language: 'en' },
+    // Central Asia
+    'KZ': { avgSessionTime: 145000, pagesPerSession: 2.4, mobileRatio: 0.70, bounceRate: 0.48, searchEngine: 'google', language: 'ru' },
+    'BY': { avgSessionTime: 150000, pagesPerSession: 2.5, mobileRatio: 0.68, bounceRate: 0.47, searchEngine: 'google', language: 'ru' }
+  },
+  
+  getPattern: (countryCode: string) => {
+    return ExtendedGeoBehaviorPatterns.patterns[countryCode] || 
+           ExtendedGeoBehaviorPatterns.patterns['US'];
+  },
+  
+  // Get all supported countries
+  getSupportedCountries: (): string[] => {
+    return Object.keys(ExtendedGeoBehaviorPatterns.patterns);
+  }
+};
+
+// Region-specific search behavior patterns
+const RegionSearchPatterns = {
+  // Search engine preferences by region
+  searchEnginePreference: {
+    'US': { google: 0.88, bing: 0.08, yahoo: 0.03, duckduckgo: 0.01 },
+    'GB': { google: 0.90, bing: 0.06, yahoo: 0.03, duckduckgo: 0.01 },
+    'DE': { google: 0.92, bing: 0.05, yahoo: 0.02, duckduckgo: 0.01 },
+    'RU': { yandex: 0.55, google: 0.40, bing: 0.03, mailru: 0.02 },
+    'CN': { baidu: 0.70, sogou: 0.15, 360: 0.10, google: 0.05 },
+    'KR': { naver: 0.60, daum: 0.15, google: 0.23, bing: 0.02 },
+    'JP': { google: 0.75, yahoo: 0.18, bing: 0.05, duckduckgo: 0.02 },
+    'DEFAULT': { google: 0.90, bing: 0.06, yahoo: 0.03, duckduckgo: 0.01 }
+  },
+  
+  // Search query patterns by region
+  queryPatterns: {
+    'US': { useQuestions: 0.35, useLocal: 0.40, avgQueryLength: 3.2 },
+    'GB': { useQuestions: 0.32, useLocal: 0.35, avgQueryLength: 3.0 },
+    'DE': { useQuestions: 0.28, useLocal: 0.30, avgQueryLength: 2.8 },
+    'JP': { useQuestions: 0.25, useLocal: 0.45, avgQueryLength: 4.5 },
+    'CN': { useQuestions: 0.20, useLocal: 0.50, avgQueryLength: 5.2 },
+    'IN': { useQuestions: 0.45, useLocal: 0.55, avgQueryLength: 4.0 },
+    'DEFAULT': { useQuestions: 0.30, useLocal: 0.35, avgQueryLength: 3.0 }
+  },
+  
+  // Get preferred search engine for country
+  getSearchEngine: (countryCode: string): string => {
+    const prefs = RegionSearchPatterns.searchEnginePreference[countryCode] || 
+                  RegionSearchPatterns.searchEnginePreference['DEFAULT'];
+    const rand = Math.random();
+    let cumulative = 0;
+    for (const [engine, prob] of Object.entries(prefs)) {
+      cumulative += prob;
+      if (rand <= cumulative) return engine;
+    }
+    return 'google';
+  },
+  
+  // Generate region-specific search query
+  generateQuery: (countryCode: string, keyword: string): string => {
+    const pattern = RegionSearchPatterns.queryPatterns[countryCode] || 
+                    RegionSearchPatterns.queryPatterns['DEFAULT'];
+    
+    let query = keyword;
+    
+    // Add question prefix
+    if (Math.random() < pattern.useQuestions) {
+      const questionPrefixes = ['how to', 'what is', 'why', 'where can I find', 'best way to'];
+      query = `${questionPrefixes[Math.floor(Math.random() * questionPrefixes.length)]} ${keyword}`;
+    }
+    
+    // Add local intent
+    if (Math.random() < pattern.useLocal) {
+      const localSuffixes = ['near me', 'nearby', 'in my area', 'local'];
+      query = `${query} ${localSuffixes[Math.floor(Math.random() * localSuffixes.length)]}`;
+    }
+    
+    return query;
+  }
+};
+
+// ============================================================
+// END PHASE 2 MODULES
 // ============================================================
 
 // ============================================================
@@ -1635,7 +2202,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v21.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v22.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -2791,7 +3358,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v21.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v22.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -7673,7 +8240,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v21.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v22.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -7725,7 +8292,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v21.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v22.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -9420,7 +9987,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v21.0
+                        TrafficFlow Enterprise v22.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -9601,7 +10168,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v21.0
+Report generated by TrafficFlow Enterprise v22.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -10587,7 +11154,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v21.0
+                        TrafficFlow Enterprise v22.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
