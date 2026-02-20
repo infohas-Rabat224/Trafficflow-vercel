@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v26-0-enterprise';
+  : 'traffic-flow-v27-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -3943,7 +3943,7 @@ const QuestionBasedTrafficRouting = {
 // ============================================================
 
 // ============================================================
-// PHASE 7: ADVANCED SAFETY MEASURES (v26.0)
+// PHASE 7: ADVANCED SAFETY MEASURES (v26.0 - Completed)
 // ============================================================
 
 // --- PHASE 7 TASK 7.1: TRAFFIC VELOCITY CONTROL ---
@@ -5192,6 +5192,1146 @@ const BotDetectionBypassTesting = {
 // ============================================================
 
 // ============================================================
+// PHASE 8: MONITORING & COMPLIANCE DASHBOARD (v27.0)
+// ============================================================
+
+// --- PHASE 8 TASK 8.1: REAL-TIME SAFETY SCORE ---
+const RealTimeSafetyScore = {
+  // Safety score configuration
+  config: {
+    updateInterval: 5000,       // Update every 5 seconds
+    historyLength: 100,          // Keep last 100 scores
+    alertThresholds: {
+      critical: 30,              // Below 30 = critical
+      warning: 50,               // Below 50 = warning
+      good: 70,                  // Below 70 = needs attention
+      excellent: 85              // Above 85 = excellent
+    }
+  },
+  
+  // Score history tracking
+  scoreHistory: [] as {
+    timestamp: number;
+    score: number;
+    components: {
+      velocity: number;
+      behavior: number;
+      detection: number;
+      referrer: number;
+      cohort: number;
+    };
+    status: 'critical' | 'warning' | 'good' | 'excellent';
+  }[],
+  
+  // Current score state
+  currentScore: {
+    overall: 0,
+    components: {
+      velocity: 0,
+      behavior: 0,
+      detection: 0,
+      referrer: 0,
+      cohort: 0
+    },
+    lastUpdated: 0,
+    trend: 'stable' as 'improving' | 'declining' | 'stable'
+  },
+  
+  // Calculate overall safety score (0-100)
+  calculateSafetyScore: (): {
+    overall: number;
+    components: {
+      velocity: number;
+      behavior: number;
+      detection: number;
+      referrer: number;
+      cohort: number;
+    };
+    status: 'critical' | 'warning' | 'good' | 'excellent';
+    recommendations: string[];
+  } => {
+    const recommendations: string[] = [];
+    let overallScore = 0;
+    
+    // 1. Traffic Velocity Score (0-100)
+    const velocityStatus = TrafficVelocityControl.getVelocityStatus();
+    let velocityScore = 100;
+    if (!velocityStatus.isWithinLimits) {
+      velocityScore = Math.max(0, 100 - (velocityStatus.currentWeeklyGrowth * 500));
+    }
+    if (velocityStatus.currentWeeklyGrowth > 0.08) {
+      velocityScore -= 10;
+      recommendations.push('Reduce weekly traffic growth rate');
+    }
+    
+    // 2. Behavioral Realism Score (0-100)
+    const cohortStats = BehavioralCohortAnalysis.getCohortStats();
+    let behaviorScore = cohortStats.isBalanced ? 100 : 70;
+    if (!cohortStats.isBalanced) {
+      behaviorScore -= 20;
+      recommendations.push(`Balance cohort distribution - ${cohortStats.dominantCohort} is over-represented`);
+    }
+    
+    // 3. Bot Detection Risk Score (0-100)
+    const bypassStatus = BotDetectionBypassTesting.getBypassStatus();
+    const detectionScore = Math.round(bypassStatus.avgScore * 100);
+    if (detectionScore < 70) {
+      recommendations.push('Run bot detection tests - scores below threshold');
+    }
+    if (bypassStatus.needsTesting) {
+      recommendations.push('Bot detection tests are overdue');
+    }
+    
+    // 4. Referrer Diversity Score (0-100)
+    const referrerStatus = ReferrerDiversity.isDistributionBalanced();
+    let referrerScore = referrerStatus.balanced ? 100 : 80;
+    if (!referrerStatus.balanced) {
+      referrerScore -= referrerStatus.recommendations.length * 10;
+      recommendations.push(...referrerStatus.recommendations.slice(0, 2));
+    }
+    
+    // 5. Cohort Diversity Score (0-100)
+    const abRisk = ABTestDetectionAvoidance.assessDetectionRisk();
+    const cohortScore = abRisk.riskLevel === 'low' ? 100 : 
+                        abRisk.riskLevel === 'medium' ? 75 : 50;
+    if (abRisk.riskLevel !== 'low') {
+      recommendations.push(...abRisk.recommendations.slice(0, 2));
+    }
+    
+    // Calculate weighted overall score
+    const weights = {
+      velocity: 0.25,
+      behavior: 0.25,
+      detection: 0.20,
+      referrer: 0.15,
+      cohort: 0.15
+    };
+    
+    overallScore = Math.round(
+      velocityScore * weights.velocity +
+      behaviorScore * weights.behavior +
+      detectionScore * weights.detection +
+      referrerScore * weights.referrer +
+      cohortScore * weights.cohort
+    );
+    
+    // Determine status
+    let status: 'critical' | 'warning' | 'good' | 'excellent';
+    if (overallScore < RealTimeSafetyScore.config.alertThresholds.critical) {
+      status = 'critical';
+    } else if (overallScore < RealTimeSafetyScore.config.alertThresholds.warning) {
+      status = 'warning';
+    } else if (overallScore < RealTimeSafetyScore.config.alertThresholds.excellent) {
+      status = 'good';
+    } else {
+      status = 'excellent';
+    }
+    
+    // Update current score
+    RealTimeSafetyScore.currentScore = {
+      overall: overallScore,
+      components: {
+        velocity: velocityScore,
+        behavior: behaviorScore,
+        detection: detectionScore,
+        referrer: referrerScore,
+        cohort: cohortScore
+      },
+      lastUpdated: Date.now(),
+      trend: RealTimeSafetyScore.calculateTrend(overallScore)
+    };
+    
+    // Record in history
+    RealTimeSafetyScore.scoreHistory.push({
+      timestamp: Date.now(),
+      score: overallScore,
+      components: RealTimeSafetyScore.currentScore.components,
+      status
+    });
+    
+    // Limit history length
+    if (RealTimeSafetyScore.scoreHistory.length > RealTimeSafetyScore.config.historyLength) {
+      RealTimeSafetyScore.scoreHistory.shift();
+    }
+    
+    return {
+      overall: overallScore,
+      components: RealTimeSafetyScore.currentScore.components,
+      status,
+      recommendations
+    };
+  },
+  
+  // Calculate score trend
+  calculateTrend: (currentScore: number): 'improving' | 'declining' | 'stable' => {
+    const history = RealTimeSafetyScore.scoreHistory;
+    if (history.length < 3) return 'stable';
+    
+    const recent = history.slice(-3);
+    const avgRecent = recent.reduce((sum, h) => sum + h.score, 0) / recent.length;
+    const diff = currentScore - avgRecent;
+    
+    if (diff > 3) return 'improving';
+    if (diff < -3) return 'declining';
+    return 'stable';
+  },
+  
+  // Get score history for charting
+  getScoreHistory: (limit: number = 20): typeof RealTimeSafetyScore.scoreHistory => {
+    return RealTimeSafetyScore.scoreHistory.slice(-limit);
+  },
+  
+  // Get dashboard metrics
+  getDashboardMetrics: (): {
+    currentScore: typeof RealTimeSafetyScore.currentScore;
+    status: string;
+    trend: string;
+    trendIcon: string;
+    lastUpdate: string;
+    componentBreakdown: { name: string; score: number; weight: number }[];
+  } => {
+    const current = RealTimeSafetyScore.currentScore;
+    
+    const statusMap: Record<string, { label: string; color: string }> = {
+      critical: { label: 'Critical - Immediate Action Required', color: 'red' },
+      warning: { label: 'Warning - Attention Needed', color: 'yellow' },
+      good: { label: 'Good - Operating Safely', color: 'green' },
+      excellent: { label: 'Excellent - Optimal Performance', color: 'emerald' }
+    };
+    
+    const trendMap: Record<string, { icon: string; label: string }> = {
+      improving: { icon: '↑', label: 'Improving' },
+      declining: { icon: '↓', label: 'Declining' },
+      stable: { icon: '→', label: 'Stable' }
+    };
+    
+    const componentBreakdown = [
+      { name: 'Traffic Velocity', score: current.components.velocity, weight: 25 },
+      { name: 'Behavioral Realism', score: current.components.behavior, weight: 25 },
+      { name: 'Bot Detection', score: current.components.detection, weight: 20 },
+      { name: 'Referrer Diversity', score: current.components.referrer, weight: 15 },
+      { name: 'Cohort Balance', score: current.components.cohort, weight: 15 }
+    ];
+    
+    const status = statusMap[current.overall >= 85 ? 'excellent' : 
+                            current.overall >= 70 ? 'good' :
+                            current.overall >= 50 ? 'warning' : 'critical'];
+    
+    return {
+      currentScore: current,
+      status: status.label,
+      trend: trendMap[current.trend].label,
+      trendIcon: trendMap[current.trend].icon,
+      lastUpdate: new Date(current.lastUpdated).toLocaleTimeString(),
+      componentBreakdown
+    };
+  },
+  
+  // Force recalculation
+  forceUpdate: () => {
+    return RealTimeSafetyScore.calculateSafetyScore();
+  }
+};
+
+// --- PHASE 8 TASK 8.2: PATTERN ANOMALY ALERTS ---
+const PatternAnomalyAlerts = {
+  // Alert configuration
+  config: {
+    thresholds: {
+      // Click pattern thresholds
+      clickRateAnomaly: { min: 0.5, max: 3.0 },      // Normal clicks per session
+      clickTimingAnomaly: { min: 150, max: 10000 },  // Normal timing range (ms)
+      
+      // Session duration thresholds
+      sessionDurationAnomaly: { min: 10000, max: 600000 },  // 10s - 10min
+      
+      // Referrer diversity thresholds
+      referrerDeviation: 0.10,  // Max 10% deviation from target
+      
+      // Cohort distribution thresholds
+      cohortImbalance: 0.40,    // Max 40% for any cohort
+      
+      // Traffic velocity thresholds
+      dailySpikeMax: 0.30,      // Max 30% daily increase
+      weeklyGrowthMax: 0.12     // Max 12% weekly growth
+    },
+    
+    // Alert severity levels
+    severityLevels: {
+      info: { color: 'blue', priority: 1 },
+      warning: { color: 'yellow', priority: 2 },
+      error: { color: 'orange', priority: 3 },
+      critical: { color: 'red', priority: 4 }
+    }
+  },
+  
+  // Alert storage
+  alerts: [] as {
+    id: string;
+    timestamp: number;
+    type: string;
+    severity: 'info' | 'warning' | 'error' | 'critical';
+    message: string;
+    details: string;
+    resolved: boolean;
+    resolvedAt?: number;
+    action?: string;
+  }[],
+  
+  // Active alert count
+  activeAlertCount: 0,
+  
+  // Check for click pattern anomalies
+  checkClickPatterns: (clickData: {
+    clicksPerSession: number;
+    avgClickTiming: number;
+    clickPath: string[];
+  }): {
+    hasAnomaly: boolean;
+    anomalies: string[];
+    severity: 'info' | 'warning' | 'error' | 'critical';
+  } => {
+    const anomalies: string[] = [];
+    let severity: 'info' | 'warning' | 'error' | 'critical' = 'info';
+    const thresholds = PatternAnomalyAlerts.config.thresholds;
+    
+    // Check clicks per session
+    if (clickData.clicksPerSession < thresholds.clickRateAnomaly.min) {
+      anomalies.push(`Low click rate: ${clickData.clicksPerSession} clicks/session (min: ${thresholds.clickRateAnomaly.min})`);
+      severity = 'warning';
+    } else if (clickData.clicksPerSession > thresholds.clickRateAnomaly.max) {
+      anomalies.push(`High click rate: ${clickData.clicksPerSession} clicks/session (max: ${thresholds.clickRateAnomaly.max})`);
+      severity = 'error';
+    }
+    
+    // Check click timing
+    if (clickData.avgClickTiming < thresholds.clickTimingAnomaly.min) {
+      anomalies.push(`Suspicious fast clicks: ${clickData.avgClickTiming}ms avg (min: ${thresholds.clickTimingAnomaly.min}ms)`);
+      severity = 'critical';
+    } else if (clickData.avgClickTiming > thresholds.clickTimingAnomaly.max) {
+      anomalies.push(`Unusually slow clicks: ${clickData.avgClickTiming}ms avg`);
+      severity = 'warning';
+    }
+    
+    return {
+      hasAnomaly: anomalies.length > 0,
+      anomalies,
+      severity
+    };
+  },
+  
+  // Check for session duration anomalies
+  checkSessionDuration: (sessionDuration: number): {
+    hasAnomaly: boolean;
+    anomaly: string | null;
+    severity: 'info' | 'warning' | 'error' | 'critical';
+  } => {
+    const thresholds = PatternAnomalyAlerts.config.thresholds;
+    
+    if (sessionDuration < thresholds.sessionDurationAnomaly.min) {
+      return {
+        hasAnomaly: true,
+        anomaly: `Session too short: ${Math.round(sessionDuration / 1000)}s (min: ${thresholds.sessionDurationAnomaly.min / 1000}s)`,
+        severity: 'warning'
+      };
+    }
+    
+    if (sessionDuration > thresholds.sessionDurationAnomaly.max) {
+      return {
+        hasAnomaly: true,
+        anomaly: `Session unusually long: ${Math.round(sessionDuration / 60000)}min (max: ${thresholds.sessionDurationAnomaly.max / 60000}min)`,
+        severity: 'info'
+      };
+    }
+    
+    return { hasAnomaly: false, anomaly: null, severity: 'info' };
+  },
+  
+  // Check referrer diversity anomalies
+  checkReferrerDiversity: (): {
+    hasAnomaly: boolean;
+    anomalies: string[];
+    severity: 'info' | 'warning' | 'error' | 'critical';
+  } => {
+    const anomalies: string[] = [];
+    let severity: 'info' | 'warning' | 'error' | 'critical' = 'info';
+    
+    const status = ReferrerDiversity.isDistributionBalanced();
+    const threshold = PatternAnomalyAlerts.config.thresholds.referrerDeviation;
+    
+    for (const [source, deviation] of Object.entries(status.deviations)) {
+      if (Math.abs(deviation) > threshold) {
+        anomalies.push(`Referrer imbalance: ${source} deviates by ${(deviation * 100).toFixed(1)}%`);
+        severity = Math.abs(deviation) > threshold * 2 ? 'error' : 'warning';
+      }
+    }
+    
+    return { hasAnomaly: anomalies.length > 0, anomalies, severity };
+  },
+  
+  // Check traffic velocity anomalies
+  checkTrafficVelocity: (): {
+    hasAnomaly: boolean;
+    anomalies: string[];
+    severity: 'info' | 'warning' | 'error' | 'critical';
+  } => {
+    const anomalies: string[] = [];
+    let severity: 'info' | 'warning' | 'error' | 'critical' = 'info';
+    const thresholds = PatternAnomalyAlerts.config.thresholds;
+    
+    const status = TrafficVelocityControl.getVelocityStatus();
+    
+    if (status.currentWeeklyGrowth > thresholds.weeklyGrowthMax) {
+      anomalies.push(`Weekly growth anomaly: ${(status.currentWeeklyGrowth * 100).toFixed(1)}% (max: ${thresholds.weeklyGrowthMax * 100}%)`);
+      severity = 'critical';
+    } else if (status.currentWeeklyGrowth > thresholds.dailySpikeMax) {
+      anomalies.push(`High weekly growth: ${(status.currentWeeklyGrowth * 100).toFixed(1)}%`);
+      severity = 'warning';
+    }
+    
+    return { hasAnomaly: anomalies.length > 0, anomalies, severity };
+  },
+  
+  // Run all anomaly checks
+  runAllChecks: (): {
+    alertCount: number;
+    newAlerts: typeof PatternAnomalyAlerts.alerts;
+    summary: {
+      critical: number;
+      error: number;
+      warning: number;
+      info: number;
+    };
+  } => {
+    const newAlerts: typeof PatternAnomalyAlerts.alerts = [];
+    
+    // Check referrer diversity
+    const referrerCheck = PatternAnomalyAlerts.checkReferrerDiversity();
+    if (referrerCheck.hasAnomaly) {
+      referrerCheck.anomalies.forEach(anomaly => {
+        newAlerts.push({
+          id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: Date.now(),
+          type: 'referrer_diversity',
+          severity: referrerCheck.severity,
+          message: anomaly,
+          details: 'Referrer distribution deviation detected',
+          resolved: false
+        });
+      });
+    }
+    
+    // Check traffic velocity
+    const velocityCheck = PatternAnomalyAlerts.checkTrafficVelocity();
+    if (velocityCheck.hasAnomaly) {
+      velocityCheck.anomalies.forEach(anomaly => {
+        newAlerts.push({
+          id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: Date.now(),
+          type: 'traffic_velocity',
+          severity: velocityCheck.severity,
+          message: anomaly,
+          details: 'Traffic velocity pattern anomaly',
+          resolved: false
+        });
+      });
+    }
+    
+    // Check cohort balance
+    const cohortStats = BehavioralCohortAnalysis.getCohortStats();
+    if (!cohortStats.isBalanced) {
+      newAlerts.push({
+        id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        type: 'cohort_imbalance',
+        severity: 'warning',
+        message: `Cohort imbalance detected: ${cohortStats.dominantCohort} is dominant`,
+        details: `Distribution: ${JSON.stringify(cohortStats.percentages)}`,
+        resolved: false
+      });
+    }
+    
+    // Check bot detection status
+    const bypassStatus = BotDetectionBypassTesting.getBypassStatus();
+    if (bypassStatus.avgScore < 0.70) {
+      newAlerts.push({
+        id: `alert_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: Date.now(),
+        type: 'bot_detection',
+        severity: bypassStatus.avgScore < 0.50 ? 'critical' : 'error',
+        message: `Bot detection score low: ${(bypassStatus.avgScore * 100).toFixed(1)}%`,
+        details: 'Consider adjusting traffic patterns or running tests',
+        resolved: false
+      });
+    }
+    
+    // Add new alerts to storage
+    PatternAnomalyAlerts.alerts.push(...newAlerts);
+    
+    // Keep only last 100 alerts
+    if (PatternAnomalyAlerts.alerts.length > 100) {
+      PatternAnomalyAlerts.alerts = PatternAnomalyAlerts.alerts.slice(-100);
+    }
+    
+    // Count active alerts
+    PatternAnomalyAlerts.activeAlertCount = PatternAnomalyAlerts.alerts.filter(a => !a.resolved).length;
+    
+    // Calculate summary
+    const summary = {
+      critical: PatternAnomalyAlerts.alerts.filter(a => !a.resolved && a.severity === 'critical').length,
+      error: PatternAnomalyAlerts.alerts.filter(a => !a.resolved && a.severity === 'error').length,
+      warning: PatternAnomalyAlerts.alerts.filter(a => !a.resolved && a.severity === 'warning').length,
+      info: PatternAnomalyAlerts.alerts.filter(a => !a.resolved && a.severity === 'info').length
+    };
+    
+    return {
+      alertCount: PatternAnomalyAlerts.activeAlertCount,
+      newAlerts,
+      summary
+    };
+  },
+  
+  // Resolve an alert
+  resolveAlert: (alertId: string): boolean => {
+    const alert = PatternAnomalyAlerts.alerts.find(a => a.id === alertId);
+    if (alert) {
+      alert.resolved = true;
+      alert.resolvedAt = Date.now();
+      PatternAnomalyAlerts.activeAlertCount--;
+      return true;
+    }
+    return false;
+  },
+  
+  // Get active alerts
+  getActiveAlerts: (): typeof PatternAnomalyAlerts.alerts => {
+    return PatternAnomalyAlerts.alerts.filter(a => !a.resolved);
+  },
+  
+  // Get alert history
+  getAlertHistory: (limit: number = 20): typeof PatternAnomalyAlerts.alerts => {
+    return PatternAnomalyAlerts.alerts.slice(-limit);
+  },
+  
+  // Clear all alerts
+  clearAllAlerts: () => {
+    PatternAnomalyAlerts.alerts = [];
+    PatternAnomalyAlerts.activeAlertCount = 0;
+  }
+};
+
+// --- PHASE 8 TASK 8.3: GOOGLE ALGORITHM UPDATE RESPONSE ---
+const GoogleAlgorithmUpdateResponse = {
+  // Known algorithm updates
+  knownUpdates: {
+    'core-update': {
+      name: 'Google Core Update',
+      impactAreas: ['content-quality', 'e-e-a-t', 'user-experience'],
+      responseActions: ['reduce-velocity', 'increase-diversity', 'improve-engagement']
+    },
+    'helpful-content': {
+      name: 'Helpful Content Update',
+      impactAreas: ['content-relevance', 'user-intent', 'page-value'],
+      responseActions: ['focus-content-sessions', 'reduce-bounce', 'increase-scroll-depth']
+    },
+    'spam-update': {
+      name: 'Spam Update',
+      impactAreas: ['traffic-patterns', 'link-quality', 'behavioral-signals'],
+      responseActions: ['reduce-all-velocity', 'increase-natural-patterns', 'pause-aggressive-campaigns']
+    },
+    'link-spam': {
+      name: 'Link Spam Update',
+      impactAreas: ['backlink-profile', 'anchor-text', 'referral-patterns'],
+      responseActions: ['diversify-referrers', 'reduce-branded-queries', 'natural-link-velocity']
+    },
+    'page-experience': {
+      name: 'Page Experience Update',
+      impactAreas: ['core-web-vitals', 'mobile-usability', 'safe-browsing'],
+      responseActions: ['prioritize-mobile-sessions', 'improve-session-quality', 'reduce-bounce-rate']
+    },
+    'review-update': {
+      name: 'Review Update',
+      impactAreas: ['review-quality', 'rating-patterns', 'testimonial-authenticity'],
+      responseActions: ['natural-review-patterns', 'diversify-review-sources', 'authentic-timing']
+    }
+  },
+  
+  // Update detection state
+  detectionState: {
+    lastCheck: 0,
+    checkInterval: 3600000,  // Check every hour
+    currentRisk: 'normal' as 'low' | 'normal' | 'elevated' | 'high',
+    detectedUpdates: [] as string[],
+    responseActive: false,
+    responseStarted: null as number | null
+  },
+  
+  // Response parameters
+  responseParameters: {
+    velocityMultiplier: 1.0,
+    diversityMultiplier: 1.0,
+    sessionQualityMultiplier: 1.0,
+    pauseAggressive: false
+  },
+  
+  // Detect potential algorithm update
+  detectAlgorithmUpdate: (metrics: {
+    trafficDrop: number;
+    rankingVolatility: number;
+    serpChanges: number;
+    industrySignals: number;
+  }): {
+    updateDetected: boolean;
+    confidence: number;
+    likelyUpdates: string[];
+    recommendedActions: string[];
+    riskLevel: 'low' | 'normal' | 'elevated' | 'high';
+  } => {
+    const likelyUpdates: string[] = [];
+    const recommendedActions: string[] = [];
+    let riskLevel: 'low' | 'normal' | 'elevated' | 'high' = 'normal';
+    let confidence = 0;
+    
+    // Analyze signals
+    const signals = [
+      metrics.trafficDrop,
+      metrics.rankingVolatility,
+      metrics.serpChanges,
+      metrics.industrySignals
+    ];
+    
+    const avgSignal = signals.reduce((sum, s) => sum + s, 0) / signals.length;
+    
+    // Determine if update is likely
+    if (avgSignal > 0.7) {
+      confidence = 0.8 + Math.random() * 0.15;
+      riskLevel = 'high';
+      likelyUpdates.push('core-update', 'spam-update');
+      recommendedActions.push(
+        'Reduce traffic velocity by 30%',
+        'Increase behavioral diversity',
+        'Pause aggressive campaigns'
+      );
+    } else if (avgSignal > 0.5) {
+      confidence = 0.6 + Math.random() * 0.2;
+      riskLevel = 'elevated';
+      likelyUpdates.push('helpful-content');
+      recommendedActions.push(
+        'Reduce traffic velocity by 15%',
+        'Focus on content engagement'
+      );
+    } else if (avgSignal > 0.3) {
+      confidence = 0.4 + Math.random() * 0.2;
+      riskLevel = 'normal';
+      recommendedActions.push('Monitor patterns closely');
+    } else {
+      confidence = 0.2 + Math.random() * 0.1;
+      riskLevel = 'low';
+    }
+    
+    // Update detection state
+    GoogleAlgorithmUpdateResponse.detectionState.lastCheck = Date.now();
+    GoogleAlgorithmUpdateResponse.detectionState.currentRisk = riskLevel;
+    
+    if (likelyUpdates.length > 0) {
+      GoogleAlgorithmUpdateResponse.detectionState.detectedUpdates = likelyUpdates;
+    }
+    
+    return {
+      updateDetected: confidence > 0.5,
+      confidence,
+      likelyUpdates,
+      recommendedActions,
+      riskLevel
+    };
+  },
+  
+  // Activate response to detected update
+  activateResponse: (updateType: string): {
+    success: boolean;
+    actions: string[];
+    parameterChanges: typeof GoogleAlgorithmUpdateResponse.responseParameters;
+    logEntry: {
+      timestamp: number;
+      updateType: string;
+      actions: string[];
+      previousParameters: typeof GoogleAlgorithmUpdateResponse.responseParameters;
+    };
+  } => {
+    const update = GoogleAlgorithmUpdateResponse.knownUpdates[updateType as keyof typeof GoogleAlgorithmUpdateResponse.knownUpdates];
+    
+    if (!update) {
+      return {
+        success: false,
+        actions: ['Unknown update type'],
+        parameterChanges: GoogleAlgorithmUpdateResponse.responseParameters,
+        logEntry: {
+          timestamp: Date.now(),
+          updateType,
+          actions: ['Failed: Unknown update type'],
+          previousParameters: { ...GoogleAlgorithmUpdateResponse.responseParameters }
+        }
+      };
+    }
+    
+    // Store previous parameters
+    const previousParameters = { ...GoogleAlgorithmUpdateResponse.responseParameters };
+    
+    // Apply response actions
+    const actions: string[] = [];
+    
+    for (const action of update.responseActions) {
+      switch (action) {
+        case 'reduce-velocity':
+          GoogleAlgorithmUpdateResponse.responseParameters.velocityMultiplier = 0.7;
+          actions.push('Reduced traffic velocity by 30%');
+          break;
+        case 'reduce-all-velocity':
+          GoogleAlgorithmUpdateResponse.responseParameters.velocityMultiplier = 0.5;
+          actions.push('Reduced all traffic velocity by 50%');
+          break;
+        case 'increase-diversity':
+          GoogleAlgorithmUpdateResponse.responseParameters.diversityMultiplier = 1.3;
+          actions.push('Increased referrer diversity by 30%');
+          break;
+        case 'improve-engagement':
+          GoogleAlgorithmUpdateResponse.responseParameters.sessionQualityMultiplier = 1.2;
+          actions.push('Increased session quality requirements by 20%');
+          break;
+        case 'pause-aggressive-campaigns':
+          GoogleAlgorithmUpdateResponse.responseParameters.pauseAggressive = true;
+          actions.push('Paused aggressive campaign modes');
+          break;
+        case 'focus-content-sessions':
+          actions.push('Focusing on content engagement patterns');
+          break;
+        case 'increase-natural-patterns':
+          actions.push('Enhanced natural behavior patterns');
+          break;
+        default:
+          actions.push(`Applied: ${action}`);
+      }
+    }
+    
+    // Update state
+    GoogleAlgorithmUpdateResponse.detectionState.responseActive = true;
+    GoogleAlgorithmUpdateResponse.detectionState.responseStarted = Date.now();
+    
+    // Create log entry
+    const logEntry = {
+      timestamp: Date.now(),
+      updateType,
+      actions,
+      previousParameters
+    };
+    
+    // Log to audit trail
+    AuditTrailLogging.logEvent('algorithm_response', {
+      updateType,
+      updateName: update.name,
+      actions,
+      parameters: GoogleAlgorithmUpdateResponse.responseParameters
+    });
+    
+    return {
+      success: true,
+      actions,
+      parameterChanges: GoogleAlgorithmUpdateResponse.responseParameters,
+      logEntry
+    };
+  },
+  
+  // Deactivate response (return to normal)
+  deactivateResponse: (): {
+    success: boolean;
+    duration: number;
+    actions: string[];
+  } => {
+    if (!GoogleAlgorithmUpdateResponse.detectionState.responseActive) {
+      return {
+        success: false,
+        duration: 0,
+        actions: ['No active response to deactivate']
+      };
+    }
+    
+    const duration = Date.now() - (GoogleAlgorithmUpdateResponse.detectionState.responseStarted || 0);
+    
+    // Reset parameters
+    GoogleAlgorithmUpdateResponse.responseParameters = {
+      velocityMultiplier: 1.0,
+      diversityMultiplier: 1.0,
+      sessionQualityMultiplier: 1.0,
+      pauseAggressive: false
+    };
+    
+    // Update state
+    GoogleAlgorithmUpdateResponse.detectionState.responseActive = false;
+    GoogleAlgorithmUpdateResponse.detectionState.responseStarted = null;
+    GoogleAlgorithmUpdateResponse.detectionState.currentRisk = 'normal';
+    GoogleAlgorithmUpdateResponse.detectionState.detectedUpdates = [];
+    
+    const actions = [
+      'Restored normal traffic velocity',
+      'Restored standard diversity settings',
+      'Resumed normal campaign modes'
+    ];
+    
+    // Log to audit trail
+    AuditTrailLogging.logEvent('algorithm_response_ended', {
+      duration,
+      actions
+    });
+    
+    return {
+      success: true,
+      duration,
+      actions
+    };
+  },
+  
+  // Get current status
+  getStatus: (): {
+    currentRisk: string;
+    responseActive: boolean;
+    responseDuration: number | null;
+    activeParameters: typeof GoogleAlgorithmUpdateResponse.responseParameters;
+    detectedUpdates: string[];
+  } => {
+    return {
+      currentRisk: GoogleAlgorithmUpdateResponse.detectionState.currentRisk,
+      responseActive: GoogleAlgorithmUpdateResponse.detectionState.responseActive,
+      responseDuration: GoogleAlgorithmUpdateResponse.detectionState.responseStarted 
+        ? Date.now() - GoogleAlgorithmUpdateResponse.detectionState.responseStarted 
+        : null,
+      activeParameters: GoogleAlgorithmUpdateResponse.responseParameters,
+      detectedUpdates: GoogleAlgorithmUpdateResponse.detectionState.detectedUpdates
+    };
+  }
+};
+
+// --- PHASE 8 TASK 8.4: AUDIT TRAIL & LOGGING ---
+const AuditTrailLogging = {
+  // Log storage
+  logs: [] as {
+    id: string;
+    timestamp: number;
+    category: string;
+    eventType: string;
+    data: Record<string, unknown>;
+    severity: 'debug' | 'info' | 'warning' | 'error' | 'critical';
+    sessionId?: string;
+    campaignId?: string;
+  }[],
+  
+  // Configuration
+  config: {
+    maxLogs: 10000,
+    retentionDays: 30,
+    categories: [
+      'session_event',
+      'referrer_pattern',
+      'click_through',
+      'conversion',
+      'safety_score',
+      'algorithm_response',
+      'anomaly_alert',
+      'traffic_velocity',
+      'bot_detection',
+      'system_event'
+    ],
+    exportFormats: ['json', 'csv']
+  },
+  
+  // Log an event
+  logEvent: (
+    eventType: string,
+    data: Record<string, unknown>,
+    options?: {
+      severity?: 'debug' | 'info' | 'warning' | 'error' | 'critical';
+      sessionId?: string;
+      campaignId?: string;
+      category?: string;
+    }
+  ): {
+    success: boolean;
+    logId: string;
+    timestamp: number;
+  } => {
+    const logId = `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const timestamp = Date.now();
+    
+    // Determine category from event type
+    let category = options?.category || 'system_event';
+    if (eventType.includes('session')) category = 'session_event';
+    else if (eventType.includes('referrer')) category = 'referrer_pattern';
+    else if (eventType.includes('click')) category = 'click_through';
+    else if (eventType.includes('conversion')) category = 'conversion';
+    else if (eventType.includes('safety')) category = 'safety_score';
+    else if (eventType.includes('algorithm')) category = 'algorithm_response';
+    else if (eventType.includes('anomaly') || eventType.includes('alert')) category = 'anomaly_alert';
+    else if (eventType.includes('velocity')) category = 'traffic_velocity';
+    else if (eventType.includes('bot') || eventType.includes('detection')) category = 'bot_detection';
+    
+    const log = {
+      id: logId,
+      timestamp,
+      category,
+      eventType,
+      data,
+      severity: options?.severity || 'info',
+      sessionId: options?.sessionId,
+      campaignId: options?.campaignId
+    };
+    
+    AuditTrailLogging.logs.push(log);
+    
+    // Enforce max logs limit
+    if (AuditTrailLogging.logs.length > AuditTrailLogging.config.maxLogs) {
+      AuditTrailLogging.logs = AuditTrailLogging.logs.slice(-AuditTrailLogging.config.maxLogs);
+    }
+    
+    return {
+      success: true,
+      logId,
+      timestamp
+    };
+  },
+  
+  // Log session event
+  logSessionEvent: (
+    sessionId: string,
+    eventType: string,
+    data: Record<string, unknown>
+  ) => {
+    return AuditTrailLogging.logEvent(eventType, data, {
+      category: 'session_event',
+      sessionId
+    });
+  },
+  
+  // Log referrer pattern
+  logReferrerPattern: (
+    sessionId: string,
+    referrer: string,
+    keyword?: string
+  ) => {
+    return AuditTrailLogging.logEvent('referrer_recorded', {
+      referrer,
+      keyword,
+      distributionStatus: ReferrerDiversity.getCurrentDistributionPercentages()
+    }, {
+      category: 'referrer_pattern',
+      sessionId
+    });
+  },
+  
+  // Log click-through event
+  logClickThrough: (
+    sessionId: string,
+    campaignId: string,
+    clickData: {
+      targetUrl: string;
+      position: number;
+      keyword: string;
+      ctr: number;
+    }
+  ) => {
+    return AuditTrailLogging.logEvent('click_through', clickData, {
+      category: 'click_through',
+      sessionId,
+      campaignId
+    });
+  },
+  
+  // Log conversion event
+  logConversion: (
+    sessionId: string,
+    campaignId: string,
+    conversionData: {
+      type: string;
+      value: number;
+      duration: number;
+    }
+  ) => {
+    return AuditTrailLogging.logEvent('conversion', conversionData, {
+      category: 'conversion',
+      sessionId,
+      campaignId,
+      severity: 'info'
+    });
+  },
+  
+  // Log safety score change
+  logSafetyScoreChange: (
+    previousScore: number,
+    newScore: number,
+    components: Record<string, number>
+  ) => {
+    return AuditTrailLogging.logEvent('safety_score_update', {
+      previousScore,
+      newScore,
+      change: newScore - previousScore,
+      components
+    }, {
+      category: 'safety_score',
+      severity: newScore < 50 ? 'warning' : 'info'
+    });
+  },
+  
+  // Get logs by category
+  getLogsByCategory: (category: string, limit: number = 100): typeof AuditTrailLogging.logs => {
+    return AuditTrailLogging.logs
+      .filter(log => log.category === category)
+      .slice(-limit);
+  },
+  
+  // Get logs by session
+  getLogsBySession: (sessionId: string): typeof AuditTrailLogging.logs => {
+    return AuditTrailLogging.logs.filter(log => log.sessionId === sessionId);
+  },
+  
+  // Get logs by time range
+  getLogsByTimeRange: (startTime: number, endTime: number): typeof AuditTrailLogging.logs => {
+    return AuditTrailLogging.logs.filter(log => 
+      log.timestamp >= startTime && log.timestamp <= endTime
+    );
+  },
+  
+  // Get logs by severity
+  getLogsBySeverity: (severity: string): typeof AuditTrailLogging.logs => {
+    return AuditTrailLogging.logs.filter(log => log.severity === severity);
+  },
+  
+  // Get audit summary
+  getAuditSummary: (hours: number = 24): {
+    totalEvents: number;
+    byCategory: Record<string, number>;
+    bySeverity: Record<string, number>;
+    topEventTypes: { type: string; count: number }[];
+    errorCount: number;
+    warningCount: number;
+  } => {
+    const cutoff = Date.now() - (hours * 60 * 60 * 1000);
+    const recentLogs = AuditTrailLogging.logs.filter(log => log.timestamp >= cutoff);
+    
+    // Count by category
+    const byCategory: Record<string, number> = {};
+    for (const log of recentLogs) {
+      byCategory[log.category] = (byCategory[log.category] || 0) + 1;
+    }
+    
+    // Count by severity
+    const bySeverity: Record<string, number> = {};
+    for (const log of recentLogs) {
+      bySeverity[log.severity] = (bySeverity[log.severity] || 0) + 1;
+    }
+    
+    // Top event types
+    const eventTypeCounts: Record<string, number> = {};
+    for (const log of recentLogs) {
+      eventTypeCounts[log.eventType] = (eventTypeCounts[log.eventType] || 0) + 1;
+    }
+    const topEventTypes = Object.entries(eventTypeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+    
+    return {
+      totalEvents: recentLogs.length,
+      byCategory,
+      bySeverity,
+      topEventTypes,
+      errorCount: bySeverity['error'] || 0,
+      warningCount: bySeverity['warning'] || 0
+    };
+  },
+  
+  // Export logs
+  exportLogs: (format: 'json' | 'csv' = 'json', filters?: {
+    category?: string;
+    severity?: string;
+    startTime?: number;
+    endTime?: number;
+  }): string => {
+    let logsToExport = [...AuditTrailLogging.logs];
+    
+    // Apply filters
+    if (filters?.category) {
+      logsToExport = logsToExport.filter(log => log.category === filters.category);
+    }
+    if (filters?.severity) {
+      logsToExport = logsToExport.filter(log => log.severity === filters.severity);
+    }
+    if (filters?.startTime) {
+      logsToExport = logsToExport.filter(log => log.timestamp >= filters.startTime!);
+    }
+    if (filters?.endTime) {
+      logsToExport = logsToExport.filter(log => log.timestamp <= filters.endTime!);
+    }
+    
+    if (format === 'json') {
+      return JSON.stringify(logsToExport, null, 2);
+    } else {
+      // CSV format
+      const headers = ['id', 'timestamp', 'category', 'eventType', 'severity', 'sessionId', 'campaignId', 'data'];
+      const rows = logsToExport.map(log => [
+        log.id,
+        new Date(log.timestamp).toISOString(),
+        log.category,
+        log.eventType,
+        log.severity,
+        log.sessionId || '',
+        log.campaignId || '',
+        JSON.stringify(log.data)
+      ]);
+      
+      return [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+    }
+  },
+  
+  // Clear old logs
+  clearOldLogs: (daysToKeep: number = 30): number => {
+    const cutoff = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
+    const initialLength = AuditTrailLogging.logs.length;
+    AuditTrailLogging.logs = AuditTrailLogging.logs.filter(log => log.timestamp >= cutoff);
+    return initialLength - AuditTrailLogging.logs.length;
+  },
+  
+  // Get log count
+  getLogCount: (): number => {
+    return AuditTrailLogging.logs.length;
+  },
+  
+  // Get storage stats
+  getStorageStats: (): {
+    totalLogs: number;
+    oldestLog: number | null;
+    newestLog: number | null;
+    categoriesUsed: string[];
+    storageUsed: string;
+  } => {
+    const logs = AuditTrailLogging.logs;
+    const categoriesUsed = [...new Set(logs.map(log => log.category))];
+    
+    return {
+      totalLogs: logs.length,
+      oldestLog: logs.length > 0 ? logs[0].timestamp : null,
+      newestLog: logs.length > 0 ? logs[logs.length - 1].timestamp : null,
+      categoriesUsed,
+      storageUsed: `${Math.round(JSON.stringify(logs).length / 1024)} KB`
+    };
+  }
+};
+
+// ============================================================
+// END PHASE 8 MODULES
+// ============================================================
+
+// ============================================================
 // SEO DOMINATION MODULES (PHASE 1, 2, 3)
 // ============================================================
 
@@ -5950,7 +7090,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v26.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v27.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -7106,7 +8246,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v26.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v27.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -11988,7 +13128,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v26.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v27.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -12040,7 +13180,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v26.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v27.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -13735,7 +14875,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v26.0
+                        TrafficFlow Enterprise v27.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -13916,7 +15056,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v26.0
+Report generated by TrafficFlow Enterprise v27.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -14902,7 +16042,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v26.0
+                        TrafficFlow Enterprise v27.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
