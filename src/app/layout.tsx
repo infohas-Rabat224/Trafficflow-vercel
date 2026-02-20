@@ -14,24 +14,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TrafficFlow v24.0 Enterprise - Traffic Management SaaS",
-  description: "Enterprise-grade traffic management and analytics platform with Phase 5 Analytics Footprint Safety. GA4 event timing randomization, session duration realism, return visitor simulation, and UTM parameter variation.",
-  keywords: ["TrafficFlow", "Traffic Management", "Analytics", "GA4", "Campaigns", "SaaS", "SEO", "Marketing", "IP Rotation", "ISP Simulation", "CTR Optimization", "SERP Engagement", "Analytics Safety", "Event Timing"],
+  title: "TrafficFlow v25.0 Enterprise - Traffic Management SaaS",
+  description: "Enterprise-grade traffic management and analytics platform with Phase 6 PAA Integration. People Also Asked question discovery, PAA click simulation, answer box engagement, and question-based traffic routing.",
+  keywords: ["TrafficFlow", "Traffic Management", "Analytics", "GA4", "Campaigns", "SaaS", "SEO", "Marketing", "IP Rotation", "ISP Simulation", "CTR Optimization", "SERP Engagement", "PAA", "People Also Asked", "Featured Snippets", "Question-Based Routing"],
   authors: [{ name: "TrafficFlow Team" }],
   icons: {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "TrafficFlow v24.0 Enterprise",
-    description: "Enterprise-grade traffic management with Analytics Footprint Safety and GA4 Event Timing Randomization",
+    title: "TrafficFlow v25.0 Enterprise",
+    description: "Enterprise-grade traffic management with PAA Integration and Question-Based Traffic Routing",
     url: "https://trafficflow.io",
     siteName: "TrafficFlow",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "TrafficFlow v24.0 Enterprise",
-    description: "Enterprise-grade traffic management with Analytics Footprint Safety and GA4 Event Timing Randomization",
+    title: "TrafficFlow v25.0 Enterprise",
+    description: "Enterprise-grade traffic management with PAA Integration and Question-Based Traffic Routing",
   },
 };
 

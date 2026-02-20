@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v24-0-enterprise';
+  : 'traffic-flow-v25-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -2307,7 +2307,7 @@ const SearchConsoleFootprintSimulator = {
 // ============================================================
 
 // ============================================================
-// PHASE 5: ANALYTICS FOOTPRINT SAFETY (v24.0)
+// PHASE 5: ANALYTICS FOOTPRINT SAFETY (v24.0 - Completed)
 // ============================================================
 
 // --- PHASE 5 TASK 5.1: GA4 EVENT TIMING RANDOMIZATION ---
@@ -3031,6 +3031,915 @@ const UTMParameterVariator = {
 
 // ============================================================
 // END PHASE 5 MODULES
+// ============================================================
+
+// ============================================================
+// PHASE 6: "PEOPLE ALSO ASKED" (PAA) INTEGRATION (v25.0)
+// ============================================================
+
+// --- PHASE 6 TASK 6.1: PAA QUESTION DISCOVERY API ---
+const PAAQuestionDiscoveryAPI = {
+  // Cache for discovered PAA questions
+  questionCache: new Map<string, { questions: string[]; timestamp: number; ttl: number }>(),
+  
+  // Cache configuration
+  cacheConfig: {
+    defaultTTL: 3600000, // 1 hour cache
+    maxEntries: 500,
+    cleanupInterval: 600000 // Clean every 10 minutes
+  },
+  
+  // API call rate limiting
+  rateLimiter: {
+    calls: [] as number[],
+    maxCallsPerMinute: 10,
+    minSpacingMs: 6000, // Minimum 6 seconds between calls
+    lastCallTime: 0
+  },
+  
+  // Question templates by category
+  questionCategories: {
+    definition: [
+      'What is {keyword}?',
+      'What does {keyword} mean?',
+      'Define {keyword}',
+      '{keyword} definition'
+    ],
+    howTo: [
+      'How to {keyword}?',
+      'How does {keyword} work?',
+      'How do I {keyword}?',
+      'How can I {keyword}?'
+    ],
+    comparison: [
+      '{keyword} vs alternatives',
+      'What is the difference between {keyword} and alternatives?',
+      '{keyword} or competitor which is better?'
+    ],
+    benefits: [
+      'What are the benefits of {keyword}?',
+      'Why use {keyword}?',
+      'Advantages of {keyword}',
+      'Is {keyword} worth it?'
+    ],
+    cost: [
+      'How much does {keyword} cost?',
+      'Is {keyword} free?',
+      '{keyword} pricing',
+      'Why is {keyword} so expensive?'
+    ],
+    timing: [
+      'When to use {keyword}?',
+      'When should I {keyword}?',
+      'Best time for {keyword}'
+    ],
+    troubleshooting: [
+      'Why is {keyword} not working?',
+      'How to fix {keyword} problems?',
+      'Common {keyword} issues'
+    ],
+    location: [
+      'Where to find {keyword}?',
+      'Where can I get {keyword}?',
+      '{keyword} near me'
+    ]
+  },
+  
+  // Check if we can make an API call (rate limiting)
+  canMakeAPICall: (): boolean => {
+    const now = Date.now();
+    const limiter = PAAQuestionDiscoveryAPI.rateLimiter;
+    
+    // Clean old calls
+    limiter.calls = limiter.calls.filter(t => now - t < 60000);
+    
+    // Check minimum spacing
+    if (now - limiter.lastCallTime < limiter.minSpacingMs) {
+      return false;
+    }
+    
+    // Check max calls per minute
+    if (limiter.calls.length >= limiter.maxCallsPerMinute) {
+      return false;
+    }
+    
+    return true;
+  },
+  
+  // Record an API call
+  recordAPICall: () => {
+    const now = Date.now();
+    PAAQuestionDiscoveryAPI.rateLimiter.calls.push(now);
+    PAAQuestionDiscoveryAPI.rateLimiter.lastCallTime = now;
+  },
+  
+  // Generate natural API delay
+  getNaturalAPIDelay: (): number => {
+    // Poisson-distributed delay for natural spacing
+    const base = PAAQuestionDiscoveryAPI.rateLimiter.minSpacingMs;
+    const variation = Math.random() * 3000; // 0-3s additional random delay
+    return base + variation;
+  },
+  
+  // Simulate fetching PAA questions from Google
+  fetchPAAQuestions: async (keyword: string): Promise<{
+    questions: string[];
+    cached: boolean;
+    fetchTime: number;
+    source: string;
+  }> => {
+    const startTime = Date.now();
+    
+    // Check cache first
+    const cached = PAAQuestionDiscoveryAPI.questionCache.get(keyword);
+    if (cached && Date.now() - cached.timestamp < cached.ttl) {
+      return {
+        questions: cached.questions,
+        cached: true,
+        fetchTime: Date.now() - startTime,
+        source: 'cache'
+      };
+    }
+    
+    // Check rate limit
+    if (!PAAQuestionDiscoveryAPI.canMakeAPICall()) {
+      // Return cached or empty with delay
+      await new Promise(resolve => setTimeout(resolve, PAAQuestionDiscoveryAPI.getNaturalAPIDelay()));
+    }
+    
+    // Record the API call
+    PAAQuestionDiscoveryAPI.recordAPICall();
+    
+    // Simulate API fetch delay (200-800ms)
+    await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 600));
+    
+    // Generate relevant questions based on keyword
+    const questions = PAAQuestionDiscoveryAPI.generateRelevantQuestions(keyword);
+    
+    // Cache the results
+    PAAQuestionDiscoveryAPI.questionCache.set(keyword, {
+      questions,
+      timestamp: Date.now(),
+      ttl: PAAQuestionDiscoveryAPI.cacheConfig.defaultTTL
+    });
+    
+    // Cleanup old cache entries
+    PAAQuestionDiscoveryAPI.cleanupCache();
+    
+    return {
+      questions,
+      cached: false,
+      fetchTime: Date.now() - startTime,
+      source: 'api_simulated'
+    };
+  },
+  
+  // Generate relevant questions for a keyword
+  generateRelevantQuestions: (keyword: string): string[] => {
+    const questions: string[] = [];
+    const categories = Object.entries(PAAQuestionDiscoveryAPI.questionCategories);
+    
+    // Select 3-5 categories based on keyword analysis
+    const numCategories = 3 + Math.floor(Math.random() * 3);
+    const selectedCategories = categories
+      .sort(() => Math.random() - 0.5)
+      .slice(0, numCategories);
+    
+    for (const [, templates] of selectedCategories) {
+      const template = templates[Math.floor(Math.random() * templates.length)];
+      questions.push(template.replace('{keyword}', keyword));
+    }
+    
+    // Add follow-up questions based on the first questions
+    if (questions.length > 0 && Math.random() > 0.5) {
+      const firstQuestion = questions[0];
+      if (firstQuestion.startsWith('What')) {
+        questions.push(`${keyword} examples and use cases`);
+      } else if (firstQuestion.startsWith('How')) {
+        questions.push(`Best practices for ${keyword}`);
+      }
+    }
+    
+    return questions.slice(0, 8); // Max 8 questions
+  },
+  
+  // Get cached questions
+  getCachedQuestions: (keyword: string): string[] | null => {
+    const cached = PAAQuestionDiscoveryAPI.questionCache.get(keyword);
+    if (cached && Date.now() - cached.timestamp < cached.ttl) {
+      return cached.questions;
+    }
+    return null;
+  },
+  
+  // Cleanup old cache entries
+  cleanupCache: () => {
+    const now = Date.now();
+    const cache = PAAQuestionDiscoveryAPI.questionCache;
+    const config = PAAQuestionDiscoveryAPI.cacheConfig;
+    
+    // Remove expired entries
+    for (const [key, value] of cache.entries()) {
+      if (now - value.timestamp > value.ttl) {
+        cache.delete(key);
+      }
+    }
+    
+    // If still too many entries, remove oldest
+    if (cache.size > config.maxEntries) {
+      const entries = Array.from(cache.entries())
+        .sort((a, b) => a[1].timestamp - b[1].timestamp);
+      const toRemove = entries.slice(0, cache.size - config.maxEntries);
+      for (const [key] of toRemove) {
+        cache.delete(key);
+      }
+    }
+  },
+  
+  // Get cache statistics
+  getCacheStats: () => {
+    const cache = PAAQuestionDiscoveryAPI.questionCache;
+    let validEntries = 0;
+    const now = Date.now();
+    
+    for (const [, value] of cache.entries()) {
+      if (now - value.timestamp < value.ttl) {
+        validEntries++;
+      }
+    }
+    
+    return {
+      totalEntries: cache.size,
+      validEntries,
+      maxEntries: PAAQuestionDiscoveryAPI.cacheConfig.maxEntries,
+      hitRate: 0 // Would need to track hits/misses for real rate
+    };
+  }
+};
+
+// --- PHASE 6 TASK 6.2: PAA CLICK SIMULATION ---
+const PAAClickSimulator = {
+  // Click behavior patterns
+  clickPatterns: {
+    // Probability of clicking PAA section
+    engageWithPAA: 0.25, // 25% of sessions engage with PAA
+    
+    // Actions within PAA
+    expandQuestion: 0.70, // 70% expand a question
+    readFullAnswer: 0.85, // 85% read the full answer
+    clickSourceLink: 0.30, // 30% click through to source
+    expandMultiple: 0.35, // 35% expand multiple questions
+    
+    // Timing patterns (in ms)
+    timeToFirstClick: { min: 1500, max: 8000 },
+    readTimePerQuestion: { min: 3000, max: 12000 },
+    timeBetweenExpansions: { min: 2000, max: 6000 },
+    hoverBeforeClick: { min: 200, max: 800 }
+  },
+  
+  // Scroll behavior before PAA engagement
+  scrollPatterns: {
+    scrollToPAA: 0.80, // 80% scroll to PAA section first
+    pauseBeforeClick: 0.90, // 90% pause before clicking
+    scrollAfterEngagement: 0.60 // 60% continue scrolling after PAA
+  },
+  
+  // Simulate PAA click sequence
+  simulatePAAClickSequence: (keyword: string, questions: string[]): {
+    engaged: boolean;
+    clickSequence: {
+      action: string;
+      question?: string;
+      delay: number;
+      scrollPosition: number;
+    }[];
+    totalTime: number;
+    clickThroughToSource: boolean;
+    questionsExpanded: string[];
+  } => {
+    const sequence: { action: string; question?: string; delay: number; scrollPosition: number }[] = [];
+    let totalTime = 0;
+    const questionsExpanded: string[] = [];
+    
+    // Check if session engages with PAA
+    if (Math.random() > PAAClickSimulator.clickPatterns.engageWithPAA) {
+      return {
+        engaged: false,
+        clickSequence: [],
+        totalTime: 0,
+        clickThroughToSource: false,
+        questionsExpanded: []
+      };
+    }
+    
+    // Initial scroll to PAA section
+    if (Math.random() < PAAClickSimulator.scrollPatterns.scrollToPAA) {
+      const scrollDelay = 1000 + Math.random() * 3000;
+      sequence.push({
+        action: 'scroll_to_paa',
+        delay: scrollDelay,
+        scrollPosition: 300 + Math.random() * 200 // PAA typically appears after ads and top results
+      });
+      totalTime += scrollDelay;
+    }
+    
+    // Pause/hover before first click
+    if (Math.random() < PAAClickSimulator.scrollPatterns.pauseBeforeClick) {
+      const hoverDelay = PAAClickSimulator.clickPatterns.hoverBeforeClick.min + 
+        Math.random() * (PAAClickSimulator.clickPatterns.hoverBeforeClick.max - 
+          PAAClickSimulator.clickPatterns.hoverBeforeClick.min);
+      sequence.push({
+        action: 'hover_question',
+        delay: hoverDelay,
+        scrollPosition: sequence.length > 0 ? sequence[sequence.length - 1].scrollPosition : 400
+      });
+      totalTime += hoverDelay;
+    }
+    
+    // Determine number of questions to expand
+    const numQuestions = questions.length;
+    const expandMultiple = Math.random() < PAAClickSimulator.clickPatterns.expandMultiple;
+    const questionsToExpand = expandMultiple ? 
+      Math.min(2 + Math.floor(Math.random() * 2), numQuestions) : 1;
+    
+    // Expand questions
+    for (let i = 0; i < questionsToExpand; i++) {
+      const question = questions[i];
+      
+      // Click to expand
+      const clickDelay = PAAClickSimulator.clickPatterns.timeToFirstClick.min + 
+        Math.random() * (PAAClickSimulator.clickPatterns.timeToFirstClick.max - 
+          PAAClickSimulator.clickPatterns.timeToFirstClick.min);
+      
+      sequence.push({
+        action: 'click_expand',
+        question,
+        delay: clickDelay,
+        scrollPosition: 400 + i * 100 // Each question expands height
+      });
+      totalTime += clickDelay;
+      questionsExpanded.push(question);
+      
+      // Read answer
+      if (Math.random() < PAAClickSimulator.clickPatterns.readFullAnswer) {
+        const readTime = PAAClickSimulator.clickPatterns.readTimePerQuestion.min + 
+          Math.random() * (PAAClickSimulator.clickPatterns.readTimePerQuestion.max - 
+            PAAClickSimulator.clickPatterns.readTimePerQuestion.min);
+        
+        sequence.push({
+          action: 'read_answer',
+          question,
+          delay: readTime,
+          scrollPosition: sequence[sequence.length - 1].scrollPosition
+        });
+        totalTime += readTime;
+      }
+      
+      // Time between expansions
+      if (i < questionsToExpand - 1) {
+        const betweenDelay = PAAClickSimulator.clickPatterns.timeBetweenExpansions.min + 
+          Math.random() * (PAAClickSimulator.clickPatterns.timeBetweenExpansions.max - 
+            PAAClickSimulator.clickPatterns.timeBetweenExpansions.min);
+        totalTime += betweenDelay;
+      }
+    }
+    
+    // Click through to source
+    const clickThrough = questionsExpanded.length > 0 && 
+      Math.random() < PAAClickSimulator.clickPatterns.clickSourceLink;
+    
+    if (clickThrough) {
+      sequence.push({
+        action: 'click_source',
+        question: questionsExpanded[questionsExpanded.length - 1],
+        delay: 500 + Math.random() * 1500,
+        scrollPosition: sequence[sequence.length - 1].scrollPosition
+      });
+    }
+    
+    // Continue scrolling after engagement
+    if (Math.random() < PAAClickSimulator.scrollPatterns.scrollAfterEngagement && !clickThrough) {
+      sequence.push({
+        action: 'scroll_continue',
+        delay: 800 + Math.random() * 2000,
+        scrollPosition: 600 + Math.random() * 400
+      });
+    }
+    
+    return {
+      engaged: true,
+      clickSequence: sequence,
+      totalTime,
+      clickThroughToSource: clickThrough,
+      questionsExpanded
+    };
+  },
+  
+  // Generate randomized click path
+  generateRandomizedClickPath: (questions: string[]): number[] => {
+    const indices = Array.from({ length: questions.length }, (_, i) => i);
+    
+    // Shuffle for randomized order
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    
+    // Return 1-3 questions in random order
+    const numQuestions = Math.min(1 + Math.floor(Math.random() * 3), questions.length);
+    return indices.slice(0, numQuestions);
+  },
+  
+  // Get natural hover position
+  getNaturalHoverPosition: (): { x: number; y: number; duration: number } => {
+    return {
+      x: 150 + Math.random() * 400, // Typical sidebar/content area
+      y: 300 + Math.random() * 300, // PAA section area
+      duration: 300 + Math.random() * 500 // Hover duration
+    };
+  },
+  
+  // Calculate dwell time with PAA engagement
+  calculateDwellTimeWithPAA: (baseDwellTime: number, paaEngagement: {
+    engaged: boolean;
+    questionsExpanded: string[];
+    clickThroughToSource: boolean;
+  }): number => {
+    if (!paaEngagement.engaged) return baseDwellTime;
+    
+    // Add time for PAA engagement
+    const paaTime = paaEngagement.questionsExpanded.length * 
+      (5000 + Math.random() * 5000); // 5-10s per question
+    
+    // If clicked through, reduce subsequent dwell (visited another page)
+    const modifier = paaEngagement.clickThroughToSource ? 0.8 : 1.0;
+    
+    return Math.floor((baseDwellTime + paaTime) * modifier);
+  }
+};
+
+// --- PHASE 6 TASK 6.3: ANSWER BOX ENGAGEMENT ---
+const AnswerBoxEngagement = {
+  // Featured snippet engagement patterns
+  snippetPatterns: {
+    viewSnippet: 0.85, // 85% view the snippet
+    readFullSnippet: 0.60, // 60% read completely
+    scrollToSource: 0.40, // 40% scroll to find source
+    clickSnippetLink: 0.25, // 25% click through from snippet
+    
+    // Reading time by snippet type (ms)
+    readingTime: {
+      paragraph: { min: 4000, max: 10000 },
+      list: { min: 5000, max: 15000 },
+      table: { min: 6000, max: 18000 },
+      video: { min: 8000, max: 30000 }
+    }
+  },
+  
+  // Knowledge panel engagement
+  knowledgePanelPatterns: {
+    viewPanel: 0.70, // 70% view knowledge panel
+    readDescription: 0.55, // 55% read description
+    viewImages: 0.40, // 40% view images
+    clickSocialLinks: 0.15, // 15% click social links
+    expandPanel: 0.25 // 25% expand for more info
+  },
+  
+  // Interaction types with probabilities
+  interactionTypes: {
+    hover: 0.45, // 45% hover over content
+    highlight: 0.20, // 20% highlight/select text
+    screenshot: 0.05, // 5% screenshot (rare)
+    copy: 0.10, // 10% copy content
+    share: 0.08 // 8% share
+  },
+  
+  // Simulate featured snippet engagement
+  simulateSnippetEngagement: (keyword: string, snippetType: 'paragraph' | 'list' | 'table' | 'video'): {
+    engaged: boolean;
+    interactions: { type: string; duration: number; position: { x: number; y: number } }[];
+    totalEngagementTime: number;
+    clickedThrough: boolean;
+    snippetType: string;
+  } => {
+    const interactions: { type: string; duration: number; position: { x: number; y: number } }[] = [];
+    let totalTime = 0;
+    
+    // Check if user views snippet
+    if (Math.random() > AnswerBoxEngagement.snippetPatterns.viewSnippet) {
+      return {
+        engaged: false,
+        interactions: [],
+        totalEngagementTime: 0,
+        clickedThrough: false,
+        snippetType
+      };
+    }
+    
+    // Initial view
+    const viewDuration = 500 + Math.random() * 1500;
+    interactions.push({
+      type: 'view_start',
+      duration: viewDuration,
+      position: { x: 400, y: 200 } // Typical snippet position
+    });
+    totalTime += viewDuration;
+    
+    // Reading time based on snippet type
+    const readingConfig = AnswerBoxEngagement.snippetPatterns.readingTime[snippetType];
+    if (Math.random() < AnswerBoxEngagement.snippetPatterns.readFullSnippet) {
+      const readingTime = readingConfig.min + Math.random() * (readingConfig.max - readingConfig.min);
+      interactions.push({
+        type: 'reading',
+        duration: readingTime,
+        position: { x: 400 + Math.random() * 100, y: 200 + Math.random() * 150 }
+      });
+      totalTime += readingTime;
+    }
+    
+    // Hover interaction
+    if (Math.random() < AnswerBoxEngagement.interactionTypes.hover) {
+      const hoverDuration = 300 + Math.random() * 700;
+      interactions.push({
+        type: 'hover',
+        duration: hoverDuration,
+        position: { x: 350 + Math.random() * 200, y: 180 + Math.random() * 200 }
+      });
+      totalTime += hoverDuration;
+    }
+    
+    // Highlight/select text
+    if (Math.random() < AnswerBoxEngagement.interactionTypes.highlight) {
+      const highlightDuration = 800 + Math.random() * 2000;
+      interactions.push({
+        type: 'highlight',
+        duration: highlightDuration,
+        position: { x: 400, y: 220 }
+      });
+      totalTime += highlightDuration;
+    }
+    
+    // Copy content
+    if (Math.random() < AnswerBoxEngagement.interactionTypes.copy) {
+      interactions.push({
+        type: 'copy',
+        duration: 200 + Math.random() * 300,
+        position: { x: 400, y: 220 }
+      });
+      totalTime += 500;
+    }
+    
+    // Click through to source
+    const clickedThrough = Math.random() < AnswerBoxEngagement.snippetPatterns.clickSnippetLink;
+    if (clickedThrough) {
+      interactions.push({
+        type: 'click_through',
+        duration: 300 + Math.random() * 500,
+        position: { x: 400, y: 280 }
+      });
+    }
+    
+    return {
+      engaged: true,
+      interactions,
+      totalEngagementTime: totalTime,
+      clickedThrough,
+      snippetType
+    };
+  },
+  
+  // Simulate knowledge panel engagement
+  simulateKnowledgePanelEngagement: (entity: string): {
+    engaged: boolean;
+    actions: { action: string; duration: number }[];
+    totalTime: number;
+    clickedLinks: string[];
+  } => {
+    const actions: { action: string; duration: number }[] = [];
+    let totalTime = 0;
+    const clickedLinks: string[] = [];
+    
+    if (Math.random() > AnswerBoxEngagement.knowledgePanelPatterns.viewPanel) {
+      return { engaged: false, actions: [], totalTime: 0, clickedLinks: [] };
+    }
+    
+    // View panel
+    actions.push({ action: 'view_panel', duration: 1000 + Math.random() * 2000 });
+    totalTime += actions[actions.length - 1].duration;
+    
+    // Read description
+    if (Math.random() < AnswerBoxEngagement.knowledgePanelPatterns.readDescription) {
+      actions.push({ action: 'read_description', duration: 3000 + Math.random() * 5000 });
+      totalTime += actions[actions.length - 1].duration;
+    }
+    
+    // View images
+    if (Math.random() < AnswerBoxEngagement.knowledgePanelPatterns.viewImages) {
+      actions.push({ action: 'view_images', duration: 2000 + Math.random() * 4000 });
+      totalTime += actions[actions.length - 1].duration;
+    }
+    
+    // Expand panel
+    if (Math.random() < AnswerBoxEngagement.knowledgePanelPatterns.expandPanel) {
+      actions.push({ action: 'expand_panel', duration: 500 + Math.random() * 1000 });
+      totalTime += actions[actions.length - 1].duration;
+    }
+    
+    // Click social links
+    if (Math.random() < AnswerBoxEngagement.knowledgePanelPatterns.clickSocialLinks) {
+      const socialLinks = ['website', 'twitter', 'linkedin', 'facebook', 'instagram'];
+      const clickedSocial = socialLinks[Math.floor(Math.random() * socialLinks.length)];
+      actions.push({ action: `click_${clickedSocial}`, duration: 500 });
+      clickedLinks.push(clickedSocial);
+      totalTime += 500;
+    }
+    
+    return { engaged: true, actions, totalTime, clickedLinks };
+  },
+  
+  // Determine snippet type from keyword
+  inferSnippetType: (keyword: string): 'paragraph' | 'list' | 'table' | 'video' => {
+    const lower = keyword.toLowerCase();
+    
+    if (lower.includes('how to') || lower.includes('steps') || lower.includes('ways')) {
+      return 'list';
+    }
+    if (lower.includes('vs') || lower.includes('difference') || lower.includes('compare')) {
+      return 'table';
+    }
+    if (lower.includes('video') || lower.includes('tutorial') || lower.includes('demo')) {
+      return 'video';
+    }
+    return 'paragraph';
+  },
+  
+  // Calculate engagement score
+  calculateEngagementScore: (engagement: {
+    engaged: boolean;
+    interactions?: { type: string; duration: number }[];
+    totalEngagementTime?: number;
+  }): number => {
+    if (!engagement.engaged) return 0;
+    
+    const timeScore = Math.min(50, (engagement.totalEngagementTime || 0) / 300);
+    const interactionCount = (engagement.interactions || []).length;
+    const interactionScore = Math.min(30, interactionCount * 10);
+    const depthScore = engagement.interactions?.some(i => i.type === 'click_through') ? 20 : 0;
+    
+    return Math.floor(timeScore + interactionScore + depthScore);
+  }
+};
+
+// --- PHASE 6 TASK 6.4: QUESTION-BASED TRAFFIC ROUTING ---
+const QuestionBasedTrafficRouting = {
+  // Query intent types
+  intentTypes: {
+    informational: {
+      keywords: ['what', 'how', 'why', 'when', 'where', 'who', 'which', 'guide', 'tutorial', 'learn'],
+      behavior: {
+        avgPagesPerSession: 3.5,
+        avgSessionDuration: 180000, // 3 min
+        bounceProbability: 0.25,
+        scrollDepthAvg: 0.75,
+        contentFocus: 'reading'
+      }
+    },
+    navigational: {
+      keywords: ['login', 'sign in', 'download', 'official', 'site', 'homepage'],
+      behavior: {
+        avgPagesPerSession: 2.0,
+        avgSessionDuration: 90000, // 1.5 min
+        bounceProbability: 0.15,
+        scrollDepthAvg: 0.40,
+        contentFocus: 'navigation'
+      }
+    },
+    transactional: {
+      keywords: ['buy', 'purchase', 'order', 'price', 'cost', 'cheap', 'discount', 'deal'],
+      behavior: {
+        avgPagesPerSession: 4.5,
+        avgSessionDuration: 240000, // 4 min
+        bounceProbability: 0.35,
+        scrollDepthAvg: 0.85,
+        contentFocus: 'conversion'
+      }
+    },
+    commercial: {
+      keywords: ['best', 'top', 'review', 'compare', 'vs', 'alternative', 'vs'],
+      behavior: {
+        avgPagesPerSession: 4.0,
+        avgSessionDuration: 210000, // 3.5 min
+        bounceProbability: 0.30,
+        scrollDepthAvg: 0.80,
+        contentFocus: 'research'
+      }
+    },
+    local: {
+      keywords: ['near me', 'nearby', 'local', 'in my area', 'closest', 'hours', 'directions'],
+      behavior: {
+        avgPagesPerSession: 2.5,
+        avgSessionDuration: 120000, // 2 min
+        bounceProbability: 0.20,
+        scrollDepthAvg: 0.60,
+        contentFocus: 'location'
+      }
+    }
+  },
+  
+  // Route traffic based on query intent
+  routeByQueryIntent: (query: string): {
+    intent: string;
+    confidence: number;
+    behaviorProfile: {
+      avgPagesPerSession: number;
+      avgSessionDuration: number;
+      bounceProbability: number;
+      scrollDepthAvg: number;
+      contentFocus: string;
+    };
+    recommendedActions: string[];
+  } => {
+    const lowerQuery = query.toLowerCase();
+    const scores: { intent: string; score: number; matches: string[] }[] = [];
+    
+    // Score each intent type
+    for (const [intent, config] of Object.entries(QuestionBasedTrafficRouting.intentTypes)) {
+      const matches: string[] = [];
+      let score = 0;
+      
+      for (const keyword of config.keywords) {
+        if (lowerQuery.includes(keyword)) {
+          matches.push(keyword);
+          score += 1;
+        }
+      }
+      
+      // Question mark indicates informational
+      if (query.includes('?') && intent === 'informational') {
+        score += 2;
+        matches.push('?');
+      }
+      
+      scores.push({ intent, score, matches });
+    }
+    
+    // Sort by score
+    scores.sort((a, b) => b.score - a.score);
+    
+    const bestMatch = scores[0];
+    const confidence = bestMatch.score > 0 ? Math.min(0.95, 0.5 + bestMatch.score * 0.15) : 0.3;
+    const behaviorProfile = QuestionBasedTrafficRouting.intentTypes[bestMatch.intent as keyof typeof QuestionBasedTrafficRouting.intentTypes].behavior;
+    
+    // Generate recommended actions based on intent
+    const recommendedActions = QuestionBasedTrafficRouting.generateRecommendedActions(bestMatch.intent, behaviorProfile);
+    
+    return {
+      intent: bestMatch.intent,
+      confidence,
+      behaviorProfile,
+      recommendedActions
+    };
+  },
+  
+  // Generate recommended actions for session
+  generateRecommendedActions: (intent: string, profile: typeof QuestionBasedTrafficRouting.intentTypes.informational.behavior): string[] => {
+    const actions: string[] = [];
+    
+    // Add base actions
+    actions.push(`Target ${profile.avgPagesPerSession} pages per session`);
+    actions.push(`Session duration: ${Math.round(profile.avgSessionDuration / 1000)}s target`);
+    actions.push(`Scroll depth target: ${Math.round(profile.scrollDepthAvg * 100)}%`);
+    
+    // Intent-specific actions
+    switch (intent) {
+      case 'informational':
+        actions.push('Prioritize content engagement and reading patterns');
+        actions.push('Include PAA and related searches exploration');
+        break;
+      case 'navigational':
+        actions.push('Quick navigation to target destination');
+        actions.push('Minimal exploration, focused intent');
+        break;
+      case 'transactional':
+        actions.push('Include product page interactions');
+        actions.push('Simulate cart/add-to-cart behavior');
+        actions.push('Longer session for consideration');
+        break;
+      case 'commercial':
+        actions.push('Multi-page comparison patterns');
+        actions.push('Review and rating engagement');
+        actions.push('Feature comparison interactions');
+        break;
+      case 'local':
+        actions.push('Map and direction interactions');
+        actions.push('Hours and contact info viewing');
+        break;
+    }
+    
+    return actions;
+  },
+  
+  // Adjust session parameters based on routing
+  adjustSessionParameters: (routing: ReturnType<typeof QuestionBasedTrafficRouting.routeByQueryIntent>): {
+    pagesToVisit: number;
+    sessionDuration: number;
+    scrollTargets: number[];
+    paaEngagement: boolean;
+    contentInteractions: string[];
+  } => {
+    const profile = routing.behaviorProfile;
+    
+    // Calculate pages to visit with variance
+    const pagesVariance = profile.avgPagesPerSession * 0.3;
+    const pagesToVisit = Math.max(1, Math.round(
+      profile.avgPagesPerSession + (Math.random() - 0.5) * 2 * pagesVariance
+    ));
+    
+    // Calculate session duration with variance
+    const durationVariance = profile.avgSessionDuration * 0.25;
+    const sessionDuration = Math.max(30000, Math.round(
+      profile.avgSessionDuration + (Math.random() - 0.5) * 2 * durationVariance
+    ));
+    
+    // Generate scroll targets
+    const scrollTargets: number[] = [];
+    const numScrolls = 2 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < numScrolls; i++) {
+      scrollTargets.push(Math.round(profile.scrollDepthAvg * 100 * (0.5 + Math.random() * 0.5)));
+    }
+    scrollTargets.sort((a, b) => a - b);
+    
+    // Determine PAA engagement
+    const paaEngagement = routing.intent === 'informational' && Math.random() > 0.3;
+    
+    // Content interactions based on intent
+    const contentInteractions: string[] = [];
+    switch (routing.intent) {
+      case 'informational':
+        contentInteractions.push('read', 'scroll', 'possibly_share');
+        break;
+      case 'transactional':
+        contentInteractions.push('view_product', 'add_to_cart', 'checkout_flow');
+        break;
+      case 'commercial':
+        contentInteractions.push('compare', 'read_reviews', 'view_specs');
+        break;
+      case 'navigational':
+        contentInteractions.push('navigate', 'quick_action');
+        break;
+      case 'local':
+        contentInteractions.push('view_map', 'check_hours', 'get_directions');
+        break;
+    }
+    
+    return {
+      pagesToVisit,
+      sessionDuration,
+      scrollTargets,
+      paaEngagement,
+      contentInteractions
+    };
+  },
+  
+  // Generate question variations for traffic
+  generateQuestionVariations: (baseKeyword: string): string[] => {
+    const questions: string[] = [];
+    const templates = [
+      'What is {keyword}?',
+      'How does {keyword} work?',
+      'Why is {keyword} important?',
+      'When should I use {keyword}?',
+      'What are the benefits of {keyword}?',
+      'Is {keyword} worth it?',
+      'How much does {keyword} cost?',
+      'Who needs {keyword}?',
+      'Where can I find {keyword}?',
+      '{keyword} vs alternatives'
+    ];
+    
+    // Select 3-5 templates
+    const numQuestions = 3 + Math.floor(Math.random() * 3);
+    const shuffled = [...templates].sort(() => Math.random() - 0.5);
+    
+    for (let i = 0; i < numQuestions; i++) {
+      questions.push(shuffled[i].replace('{keyword}', baseKeyword));
+    }
+    
+    return questions;
+  },
+  
+  // Get intent distribution statistics
+  getIntentStats: () => {
+    return {
+      supportedIntents: Object.keys(QuestionBasedTrafficRouting.intentTypes).length,
+      keywordPatterns: Object.values(QuestionBasedTrafficRouting.intentTypes)
+        .reduce((sum, config) => sum + config.keywords.length, 0)
+    };
+  }
+};
+
+// ============================================================
+// END PHASE 6 MODULES
 // ============================================================
 
 // ============================================================
@@ -3792,7 +4701,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v24.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v25.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -4948,7 +5857,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v24.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v25.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -9830,7 +10739,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v24.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v25.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -9882,7 +10791,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v24.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v25.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -11577,7 +12486,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v24.0
+                        TrafficFlow Enterprise v25.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -11758,7 +12667,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v24.0
+Report generated by TrafficFlow Enterprise v25.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -12744,7 +13653,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v24.0
+                        TrafficFlow Enterprise v25.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
