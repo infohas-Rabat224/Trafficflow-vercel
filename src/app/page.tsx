@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v22-0-enterprise';
+  : 'traffic-flow-v23-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -1444,6 +1444,869 @@ const RegionSearchPatterns = {
 // ============================================================
 
 // ============================================================
+// PHASE 4: SEARCH ENGINE BEHAVIOR PATTERNS (v23.0)
+// ============================================================
+
+// --- PHASE 4 TASK 4.1: ENHANCED CTR OPTIMIZATION ALGORITHM ---
+const EnhancedCTROptimizer = {
+  // Industry average CTR range (3% - 8%)
+  targetCTRRange: { min: 0.03, max: 0.08 },
+  
+  // Position-based CTR rates (industry averages)
+  positionCTR: {
+    1: 0.398, 2: 0.184, 3: 0.107, 4: 0.073, 5: 0.053,
+    6: 0.040, 7: 0.031, 8: 0.025, 9: 0.021, 10: 0.018
+  },
+  
+  // Competition level modifiers
+  competitionModifiers: {
+    'low': { ctrMultiplier: 1.3, variance: 0.15 },      // Less competition = higher CTR
+    'medium': { ctrMultiplier: 1.0, variance: 0.10 },   // Normal competition
+    'high': { ctrMultiplier: 0.75, variance: 0.08 },    // High competition = lower CTR
+    'very_high': { ctrMultiplier: 0.5, variance: 0.05 } // Very competitive
+  },
+  
+  // Spike prevention tracking
+  recentCTRHistory: [] as number[],
+  maxHistorySize: 100,
+  spikeThreshold: 0.15, // 15% above recent average triggers prevention
+  
+  // Determine competition level based on keyword characteristics
+  assessCompetitionLevel: (keyword: string, searchVolume?: number): 'low' | 'medium' | 'high' | 'very_high' => {
+    // High-value commercial keywords
+    const highCompetitionIndicators = ['buy', 'price', 'best', 'review', 'vs', 'compare', 'cheap', 'discount'];
+    const veryHighCompetitionIndicators = ['insurance', 'loan', 'mortgage', 'lawyer', 'attorney', 'casino'];
+    
+    const lowerKeyword = keyword.toLowerCase();
+    
+    if (veryHighCompetitionIndicators.some(ind => lowerKeyword.includes(ind))) {
+      return 'very_high';
+    }
+    if (highCompetitionIndicators.some(ind => lowerKeyword.includes(ind))) {
+      return 'high';
+    }
+    if (searchVolume && searchVolume > 50000) {
+      return 'high';
+    }
+    if (searchVolume && searchVolume < 5000) {
+      return 'low';
+    }
+    return 'medium';
+  },
+  
+  // Calculate CTR with all factors
+  calculateCTR: (
+    position: number, 
+    hasSchema: boolean, 
+    isFeatured: boolean,
+    keyword: string,
+    competitionLevel?: 'low' | 'medium' | 'high' | 'very_high'
+  ): number => {
+    // Get base CTR from position
+    const basePositionCTR = EnhancedCTROptimizer.positionCTR[Math.min(position, 10) as keyof typeof EnhancedCTROptimizer.positionCTR] || 0.01;
+    
+    // Apply competition modifier
+    const compLevel = competitionLevel || EnhancedCTROptimizer.assessCompetitionLevel(keyword);
+    const compModifier = EnhancedCTROptimizer.competitionModifiers[compLevel];
+    let ctr = basePositionCTR * compModifier.ctrMultiplier;
+    
+    // Schema boost
+    if (hasSchema) ctr *= 1.3;
+    
+    // Featured snippet boost
+    if (isFeatured) ctr *= 1.8;
+    
+    // Apply variance for natural distribution
+    const variance = (Math.random() - 0.5) * compModifier.variance;
+    ctr = ctr * (1 + variance);
+    
+    // Clamp to target range (3% - 8% for realistic traffic)
+    ctr = Math.max(EnhancedCTROptimizer.targetCTRRange.min, 
+                   Math.min(EnhancedCTROptimizer.targetCTRRange.max, ctr));
+    
+    // Spike prevention
+    ctr = EnhancedCTROptimizer.preventSpike(ctr);
+    
+    return ctr;
+  },
+  
+  // Prevent abnormal CTR spikes
+  preventSpike: (ctr: number): number => {
+    const history = EnhancedCTROptimizer.recentCTRHistory;
+    
+    if (history.length >= 10) {
+      const avgRecent = history.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, history.length);
+      const spikeLimit = avgRecent * (1 + EnhancedCTROptimizer.spikeThreshold);
+      
+      if (ctr > spikeLimit) {
+        // Cap at spike limit with small random adjustment
+        ctr = spikeLimit + (Math.random() * 0.01);
+      }
+    }
+    
+    // Add to history
+    history.push(ctr);
+    if (history.length > EnhancedCTROptimizer.maxHistorySize) {
+      history.shift();
+    }
+    
+    return ctr;
+  },
+  
+  // Get CTR statistics
+  getCTRStats: () => {
+    const history = EnhancedCTROptimizer.recentCTRHistory;
+    if (history.length === 0) return { avg: 0, min: 0, max: 0, withinTarget: 100 };
+    
+    const avg = history.reduce((a, b) => a + b, 0) / history.length;
+    const min = Math.min(...history);
+    const max = Math.max(...history);
+    const withinTarget = history.filter(c => c >= 0.03 && c <= 0.08).length / history.length * 100;
+    
+    return { avg, min, max, withinTarget };
+  }
+};
+
+// --- PHASE 4 TASK 4.2: SERP ENGAGEMENT SIMULATION ---
+const SERPEngagementSimulator = {
+  // Time-on-SERP configuration (2-8 seconds average)
+  serpDelays: {
+    quickScan: { min: 1500, max: 3000, probability: 0.15 },      // 15% quick scanners
+    normalView: { min: 3000, max: 6000, probability: 0.50 },     // 50% normal viewers
+    thoroughView: { min: 6000, max: 10000, probability: 0.30 },  // 30% thorough viewers
+    researcher: { min: 10000, max: 20000, probability: 0.05 }    // 5% researchers
+  },
+  
+  // SERP viewing patterns
+  viewingPatterns: {
+    top3Focus: 0.65,        // 65% focus on top 3 results
+    scrollDown: 0.45,       // 45% scroll below fold
+    viewMultiplePages: 0.15, // 15% view multiple SERP pages
+    backAndForth: 0.20      // 20% go back and forth between results
+  },
+  
+  // Determine viewer type
+  determineViewerType: (): 'quickScan' | 'normalView' | 'thoroughView' | 'researcher' => {
+    const rand = Math.random();
+    let cumulative = 0;
+    for (const [type, config] of Object.entries(SERPEngagementSimulator.serpDelays)) {
+      cumulative += config.probability;
+      if (rand <= cumulative) return type as keyof typeof SERPEngagementSimulator.serpDelays;
+    }
+    return 'normalView';
+  },
+  
+  // Generate time-on-SERP delay
+  generateSERPDelay: (): number => {
+    const viewerType = SERPEngagementSimulator.determineViewerType();
+    const config = SERPEngagementSimulator.serpDelays[viewerType];
+    // Exponential distribution for more natural timing
+    const factor = -Math.log(1 - Math.random());
+    const delay = config.min + (config.max - config.min) * (1 - Math.exp(-factor));
+    return Math.floor(delay);
+  },
+  
+  // Simulate scrolling through results
+  simulateSERPScrolling: (totalResults: number): { positions: number[]; timeAtPosition: number[] } => {
+    const positions: number[] = [];
+    const timeAtPosition: number[] = [];
+    
+    // Always see position 1
+    positions.push(1);
+    timeAtPosition.push(SERPEngagementSimulator.generateSERPDelay() / 3);
+    
+    // View positions 2-3 with high probability
+    for (let i = 2; i <= 3; i++) {
+      if (Math.random() < SERPEngagementSimulator.viewingPatterns.top3Focus) {
+        positions.push(i);
+        timeAtPosition.push(SERPEngagementSimulator.generateSERPDelay() / 4);
+      }
+    }
+    
+    // Scroll below fold
+    if (Math.random() < SERPEngagementSimulator.viewingPatterns.scrollDown) {
+      const startFrom = 4;
+      const viewCount = Math.floor(Math.random() * 4) + 1; // 1-4 more results
+      
+      for (let i = 0; i < viewCount; i++) {
+        const pos = startFrom + i;
+        if (pos <= totalResults) {
+          positions.push(pos);
+          timeAtPosition.push(SERPEngagementSimulator.generateSERPDelay() / 5);
+        }
+      }
+    }
+    
+    // Back and forth movement
+    if (Math.random() < SERPEngagementSimulator.viewingPatterns.backAndForth && positions.length > 1) {
+      // Revisit a previous position
+      const revisitPos = positions[Math.floor(Math.random() * (positions.length - 1))];
+      positions.push(revisitPos);
+      timeAtPosition.push(SERPEngagementSimulator.generateSERPDelay() / 4);
+    }
+    
+    return { positions, timeAtPosition };
+  },
+  
+  // Simulate viewing multiple listings
+  simulateMultiListingView: (): { viewedListings: number; totalSERPTime: number } => {
+    const viewerType = SERPEngagementSimulator.determineViewerType();
+    
+    let viewedListings = 1;
+    switch (viewerType) {
+      case 'quickScan': viewedListings = Math.floor(Math.random() * 2) + 1; break; // 1-2 listings
+      case 'normalView': viewedListings = Math.floor(Math.random() * 3) + 2; break; // 2-4 listings
+      case 'thoroughView': viewedListings = Math.floor(Math.random() * 4) + 4; break; // 4-7 listings
+      case 'researcher': viewedListings = Math.floor(Math.random() * 5) + 6; break; // 6-10 listings
+    }
+    
+    const totalSERPTime = SERPEngagementSimulator.generateSERPDelay() * viewedListings;
+    
+    return { viewedListings, totalSERPTime };
+  },
+  
+  // Complete SERP engagement simulation
+  simulateFullSERPEngagement: (keyword: string, targetPosition: number): {
+    serpDelay: number;
+    positionsViewed: number[];
+    timeAtPosition: number[];
+    viewedListings: number;
+    clickedResult: number | null;
+    scrollBehavior: string;
+  } => {
+    const scrollData = SERPEngagementSimulator.simulateSERPScrolling(10);
+    const listingData = SERPEngagementSimulator.simulateMultiListingView();
+    
+    // Determine if target was clicked (based on position and visibility)
+    const wasTargetViewed = scrollData.positionsViewed.includes(targetPosition);
+    const clickProbability = wasTargetViewed ? 0.35 : 0.05;
+    const clickedResult = Math.random() < clickProbability ? targetPosition : 
+                          (Math.random() < 0.3 ? scrollData.positionsViewed[Math.floor(Math.random() * scrollData.positionsViewed.length)] : null);
+    
+    // Determine scroll behavior type
+    let scrollBehavior = 'standard';
+    if (scrollData.positionsViewed.length <= 2) scrollBehavior = 'minimal';
+    else if (scrollData.positionsViewed.length >= 6) scrollBehavior = 'thorough';
+    else if (scrollData.positionsViewed.some(p => p > 5)) scrollBehavior = 'deep_scroller';
+    
+    return {
+      serpDelay: SERPEngagementSimulator.generateSERPDelay(),
+      positionsViewed: scrollData.positionsViewed,
+      timeAtPosition: scrollData.timeAtPosition,
+      viewedListings: listingData.viewedListings,
+      clickedResult,
+      scrollBehavior
+    };
+  }
+};
+
+// --- PHASE 4 TASK 4.3: SEARCH QUERY VARIATIONS ENGINE ---
+const SearchQueryVariationEngine = {
+  // Semantic variation types
+  variationTypes: {
+    synonym: { weight: 0.25, description: 'Synonym replacement' },
+    longTail: { weight: 0.30, description: 'Long-tail extension' },
+    naturalLanguage: { weight: 0.20, description: 'Natural language phrasing' },
+    question: { weight: 0.15, description: 'Question format' },
+    local: { weight: 0.10, description: 'Local intent modifier' }
+  },
+  
+  // Synonym database for common terms
+  synonymDatabase: {
+    'best': ['top', 'leading', 'premium', 'excellent', 'quality', 'finest'],
+    'cheap': ['affordable', 'budget', 'inexpensive', 'low-cost', 'economical'],
+    'fast': ['quick', 'rapid', 'speedy', 'swift', 'prompt'],
+    'buy': ['purchase', 'order', 'get', 'shop for', 'acquire'],
+    'service': ['solution', 'provider', 'company', 'agency', 'firm'],
+    'near me': ['nearby', 'local', 'close by', 'in my area', 'around me'],
+    'review': ['rating', 'feedback', 'opinion', 'assessment', 'evaluation'],
+    'how to': ['guide', 'tutorial', 'instructions', 'steps', 'method'],
+    'price': ['cost', 'rate', 'fee', 'pricing', 'charge'],
+    'professional': ['expert', 'specialist', 'pro', 'qualified', 'certified']
+  },
+  
+  // Long-tail modifiers
+  longTailModifiers: {
+    prefixes: ['best', 'top rated', 'affordable', 'professional', 'local', 'trusted', 'reliable', 'certified'],
+    suffixes: ['near me', 'online', 'reviews', 'services', 'cost', 'prices', 'free consultation', '2024', '2025'],
+    midfixes: ['for beginners', 'for professionals', 'for small business', 'for enterprise', 'for home use']
+  },
+  
+  // Natural language patterns
+  naturalLanguagePatterns: [
+    'I need {keyword}',
+    'looking for {keyword}',
+    'where can I find {keyword}',
+    'who offers {keyword}',
+    'need help with {keyword}',
+    'want to {keyword}',
+    'trying to find {keyword}',
+    'searching for {keyword}'
+  ],
+  
+  // Question patterns
+  questionPatterns: [
+    'how to {keyword}',
+    'what is {keyword}',
+    'why {keyword}',
+    'when should I {keyword}',
+    'where can I {keyword}',
+    'which {keyword} is best',
+    'does {keyword} work',
+    'can {keyword}',
+    'is {keyword} worth it',
+    'how much does {keyword} cost'
+  ],
+  
+  // Generate synonym variation
+  generateSynonymVariation: (keyword: string): string => {
+    const words = keyword.toLowerCase().split(' ');
+    const modifiedWords = words.map(word => {
+      if (SearchQueryVariationEngine.synonymDatabase[word]) {
+        const synonyms = SearchQueryVariationEngine.synonymDatabase[word];
+        return Math.random() < 0.5 ? synonyms[Math.floor(Math.random() * synonyms.length)] : word;
+      }
+      return word;
+    });
+    return modifiedWords.join(' ');
+  },
+  
+  // Generate long-tail variation
+  generateLongTailVariation: (keyword: string): string => {
+    const rand = Math.random();
+    
+    if (rand < 0.4) {
+      // Add prefix
+      const prefix = SearchQueryVariationEngine.longTailModifiers.prefixes[
+        Math.floor(Math.random() * SearchQueryVariationEngine.longTailModifiers.prefixes.length)
+      ];
+      return `${prefix} ${keyword}`;
+    } else if (rand < 0.75) {
+      // Add suffix
+      const suffix = SearchQueryVariationEngine.longTailModifiers.suffixes[
+        Math.floor(Math.random() * SearchQueryVariationEngine.longTailModifiers.suffixes.length)
+      ];
+      return `${keyword} ${suffix}`;
+    } else {
+      // Add midfix
+      const midfix = SearchQueryVariationEngine.longTailModifiers.midfixes[
+        Math.floor(Math.random() * SearchQueryVariationEngine.longTailModifiers.midfixes.length)
+      ];
+      const words = keyword.split(' ');
+      const midPoint = Math.ceil(words.length / 2);
+      return [...words.slice(0, midPoint), midfix, ...words.slice(midPoint)].join(' ');
+    }
+  },
+  
+  // Generate natural language variation
+  generateNaturalLanguageVariation: (keyword: string): string => {
+    const pattern = SearchQueryVariationEngine.naturalLanguagePatterns[
+      Math.floor(Math.random() * SearchQueryVariationEngine.naturalLanguagePatterns.length)
+    ];
+    return pattern.replace('{keyword}', keyword);
+  },
+  
+  // Generate question variation
+  generateQuestionVariation: (keyword: string): string => {
+    const pattern = SearchQueryVariationEngine.questionPatterns[
+      Math.floor(Math.random() * SearchQueryVariationEngine.questionPatterns.length)
+    ];
+    return pattern.replace('{keyword}', keyword);
+  },
+  
+  // Generate local variation
+  generateLocalVariation: (keyword: string): string => {
+    const localModifiers = ['near me', 'nearby', 'in my area', 'local', 'close to me', 'around here'];
+    const modifier = localModifiers[Math.floor(Math.random() * localModifiers.length)];
+    
+    if (Math.random() < 0.5) {
+      return `${keyword} ${modifier}`;
+    }
+    return `${modifier} ${keyword}`;
+  },
+  
+  // Generate all variations
+  generateAllVariations: (keyword: string): { variation: string; type: string; intent: string }[] => {
+    const variations: { variation: string; type: string; intent: string }[] = [];
+    
+    // Synonym variations
+    for (let i = 0; i < 2; i++) {
+      variations.push({
+        variation: SearchQueryVariationEngine.generateSynonymVariation(keyword),
+        type: 'synonym',
+        intent: 'same'
+      });
+    }
+    
+    // Long-tail variations
+    for (let i = 0; i < 3; i++) {
+      variations.push({
+        variation: SearchQueryVariationEngine.generateLongTailVariation(keyword),
+        type: 'long_tail',
+        intent: 'refined'
+      });
+    }
+    
+    // Natural language variations
+    for (let i = 0; i < 2; i++) {
+      variations.push({
+        variation: SearchQueryVariationEngine.generateNaturalLanguageVariation(keyword),
+        type: 'natural_language',
+        intent: 'conversational'
+      });
+    }
+    
+    // Question variations
+    variations.push({
+      variation: SearchQueryVariationEngine.generateQuestionVariation(keyword),
+      type: 'question',
+      intent: 'informational'
+    });
+    
+    // Local variations
+    variations.push({
+      variation: SearchQueryVariationEngine.generateLocalVariation(keyword),
+      type: 'local',
+      intent: 'local'
+    });
+    
+    return variations;
+  },
+  
+  // Get weighted random variation
+  getWeightedVariation: (keyword: string): string => {
+    const rand = Math.random();
+    
+    if (rand < 0.25) return SearchQueryVariationEngine.generateSynonymVariation(keyword);
+    if (rand < 0.55) return SearchQueryVariationEngine.generateLongTailVariation(keyword);
+    if (rand < 0.75) return SearchQueryVariationEngine.generateNaturalLanguageVariation(keyword);
+    if (rand < 0.90) return SearchQueryVariationEngine.generateQuestionVariation(keyword);
+    return SearchQueryVariationEngine.generateLocalVariation(keyword);
+  }
+};
+
+// --- PHASE 4 TASK 4.4: RELATED SEARCHES ENGAGEMENT ---
+const RelatedSearchesEngagement = {
+  // Engagement rate (15-20% of sessions)
+  engagementRate: {
+    peopleAlsoAsk: 0.12,      // 12% engage with PAA
+    relatedSearches: 0.18,    // 18% engage with related searches
+    bothFeatures: 0.05        // 5% engage with both
+  },
+  
+  // PAA behavior patterns
+  paaPatterns: {
+    expansionClick: 0.70,     // 70% click to expand
+    readAnswer: 0.85,         // 85% read the answer
+    clickSource: 0.35,        // 35% click through to source
+    multipleExpansions: 0.40  // 40% expand multiple questions
+  },
+  
+  // Related search patterns
+  relatedSearchPatterns: {
+    viewSuggestions: 0.80,    // 80% view suggestions
+    clickSuggestion: 0.25,    // 25% click a suggestion
+    secondaryExploration: 0.15, // 15% do secondary exploration
+    refineSearch: 0.30        // 30% refine based on suggestions
+  },
+  
+  // People Also Ask questions database
+  paaQuestionTemplates: [
+    'What is {keyword}?',
+    'How does {keyword} work?',
+    'Why is {keyword} important?',
+    'When should I use {keyword}?',
+    'What are the benefits of {keyword}?',
+    'Is {keyword} worth it?',
+    'How much does {keyword} cost?',
+    'Who needs {keyword}?'
+  ],
+  
+  // Determine if session should engage with related features
+  shouldEngageWithRelatedFeatures: (): { paa: boolean; relatedSearches: boolean } => {
+    const rand = Math.random();
+    
+    if (rand < RelatedSearchesEngagement.engagementRate.bothFeatures) {
+      return { paa: true, relatedSearches: true };
+    } else if (rand < RelatedSearchesEngagement.engagementRate.bothFeatures + RelatedSearchesEngagement.engagementRate.peopleAlsoAsk) {
+      return { paa: true, relatedSearches: false };
+    } else if (rand < RelatedSearchesEngagement.engagementRate.bothFeatures + 
+                      RelatedSearchesEngagement.engagementRate.peopleAlsoAsk + 
+                      RelatedSearchesEngagement.engagementRate.relatedSearches) {
+      return { paa: false, relatedSearches: true };
+    }
+    return { paa: false, relatedSearches: false };
+  },
+  
+  // Simulate PAA interaction
+  simulatePAAInteraction: (keyword: string): {
+    engaged: boolean;
+    questionsViewed: string[];
+    expansionsClicked: number;
+    sourceClicked: boolean;
+    timeSpent: number;
+  } => {
+    const shouldEngage = Math.random() < RelatedSearchesEngagement.engagementRate.peopleAlsoAsk;
+    
+    if (!shouldEngage) {
+      return {
+        engaged: false,
+        questionsViewed: [],
+        expansionsClicked: 0,
+        sourceClicked: false,
+        timeSpent: 0
+      };
+    }
+    
+    // Generate relevant PAA questions
+    const questionsViewed: string[] = [];
+    const numQuestions = Math.floor(Math.random() * 3) + 1; // 1-3 questions
+    
+    for (let i = 0; i < numQuestions; i++) {
+      const template = RelatedSearchesEngagement.paaQuestionTemplates[
+        Math.floor(Math.random() * RelatedSearchesEngagement.paaQuestionTemplates.length)
+      ];
+      questionsViewed.push(template.replace('{keyword}', keyword));
+    }
+    
+    // Determine behavior
+    const expansionsClicked = Math.random() < RelatedSearchesEngagement.paaPatterns.expansionClick ?
+      (Math.random() < RelatedSearchesEngagement.paaPatterns.multipleExpansions ? 
+        Math.floor(Math.random() * 3) + 1 : 1) : 0;
+    
+    const sourceClicked = expansionsClicked > 0 && 
+      Math.random() < RelatedSearchesEngagement.paaPatterns.clickSource;
+    
+    const timeSpent = expansionsClicked * (3000 + Math.random() * 4000); // 3-7 seconds per expansion
+    
+    return {
+      engaged: true,
+      questionsViewed,
+      expansionsClicked,
+      sourceClicked,
+      timeSpent
+    };
+  },
+  
+  // Simulate related searches interaction
+  simulateRelatedSearchInteraction: (keyword: string): {
+    engaged: boolean;
+    suggestionsViewed: string[];
+    suggestionClicked: boolean;
+    clickedSuggestion: string | null;
+    secondaryExploration: boolean;
+    timeSpent: number;
+  } => {
+    const shouldEngage = Math.random() < RelatedSearchesEngagement.engagementRate.relatedSearches;
+    
+    if (!shouldEngage) {
+      return {
+        engaged: false,
+        suggestionsViewed: [],
+        suggestionClicked: false,
+        clickedSuggestion: null,
+        secondaryExploration: false,
+        timeSpent: 0
+      };
+    }
+    
+    // Generate related search suggestions
+    const suggestionsViewed: string[] = [];
+    const numSuggestions = Math.floor(Math.random() * 4) + 2; // 2-5 suggestions
+    
+    const relatedTerms = [
+      `${keyword} meaning`, `${keyword} examples`, `${keyword} tips`,
+      `${keyword} guide`, `${keyword} vs alternatives`, `best ${keyword}`,
+      `${keyword} for beginners`, `${keyword} advanced`
+    ];
+    
+    for (let i = 0; i < numSuggestions; i++) {
+      const suggestion = relatedTerms[Math.floor(Math.random() * relatedTerms.length)];
+      if (!suggestionsViewed.includes(suggestion)) {
+        suggestionsViewed.push(suggestion);
+      }
+    }
+    
+    const suggestionClicked = Math.random() < RelatedSearchesEngagement.relatedSearchPatterns.clickSuggestion;
+    const clickedSuggestion = suggestionClicked ? 
+      suggestionsViewed[Math.floor(Math.random() * suggestionsViewed.length)] : null;
+    
+    const secondaryExploration = suggestionClicked && 
+      Math.random() < RelatedSearchesEngagement.relatedSearchPatterns.secondaryExploration;
+    
+    const timeSpent = suggestionsViewed.length * 1500 + (suggestionClicked ? 2000 : 0);
+    
+    return {
+      engaged: true,
+      suggestionsViewed,
+      suggestionClicked,
+      clickedSuggestion,
+      secondaryExploration,
+      timeSpent
+    };
+  },
+  
+  // Full related features engagement simulation
+  simulateFullEngagement: (keyword: string): {
+    paaInteraction: ReturnType<typeof RelatedSearchesEngagement.simulatePAAInteraction>;
+    relatedSearchInteraction: ReturnType<typeof RelatedSearchesEngagement.simulateRelatedSearchInteraction>;
+    totalEngagementTime: number;
+    engagementType: string;
+  } => {
+    const engagement = RelatedSearchesEngagement.shouldEngageWithRelatedFeatures();
+    
+    const paaInteraction = engagement.paa ? 
+      RelatedSearchesEngagement.simulatePAAInteraction(keyword) :
+      { engaged: false, questionsViewed: [], expansionsClicked: 0, sourceClicked: false, timeSpent: 0 };
+    
+    const relatedSearchInteraction = engagement.relatedSearches ?
+      RelatedSearchesEngagement.simulateRelatedSearchInteraction(keyword) :
+      { engaged: false, suggestionsViewed: [], suggestionClicked: false, clickedSuggestion: null, secondaryExploration: false, timeSpent: 0 };
+    
+    const totalEngagementTime = paaInteraction.timeSpent + relatedSearchInteraction.timeSpent;
+    
+    let engagementType = 'none';
+    if (paaInteraction.engaged && relatedSearchInteraction.engaged) engagementType = 'both';
+    else if (paaInteraction.engaged) engagementType = 'paa';
+    else if (relatedSearchInteraction.engaged) engagementType = 'related_searches';
+    
+    return {
+      paaInteraction,
+      relatedSearchInteraction,
+      totalEngagementTime,
+      engagementType
+    };
+  }
+};
+
+// --- PHASE 4 TASK 4.5: SEARCH CONSOLE FOOTPRINT SIMULATION ---
+const SearchConsoleFootprintSimulator = {
+  // Referrer patterns for organic traffic
+  referrerPatterns: {
+    google: {
+      searchUrl: 'https://www.google.com/search',
+      params: ['q', 'oq', 'source', 'ei', 'ved'],
+      probability: 0.85
+    },
+    bing: {
+      searchUrl: 'https://www.bing.com/search',
+      params: ['q', 'form', 'pq'],
+      probability: 0.08
+    },
+    yahoo: {
+      searchUrl: 'https://search.yahoo.com/search',
+      params: ['p', 'fr', 'ei'],
+      probability: 0.04
+    },
+    duckduckgo: {
+      searchUrl: 'https://duckduckgo.com/',
+      params: ['q', 'ia'],
+      probability: 0.03
+    }
+  },
+  
+  // Landing page attribution patterns
+  attributionPatterns: {
+    directLanding: 0.60,         // 60% land directly on target page
+    navigationalPath: 0.25,      // 25% navigate through site first
+    contentDiscovery: 0.10,      // 10% discover through content
+    bounce: 0.05                 // 5% bounce immediately
+  },
+  
+  // Query-to-landing mapping patterns
+  queryLandingPatterns: {
+    exactMatch: 0.40,            // 40% query matches landing page intent
+    relatedMatch: 0.35,          // 35% related but not exact
+    broadMatch: 0.20,            // 20% broad match
+    navigational: 0.05           // 5% navigational queries
+  },
+  
+  // Generate realistic referrer URL
+  generateReferrerURL: (keyword: string, searchEngine: string = 'google'): string => {
+    const engine = SearchConsoleFootprintSimulator.referrerPatterns[searchEngine as keyof typeof SearchConsoleFootprintSimulator.referrerPatterns] ||
+                   SearchConsoleFootprintSimulator.referrerPatterns.google;
+    
+    const params = new URLSearchParams();
+    params.set('q', keyword);
+    
+    // Add additional params for realism
+    if (searchEngine === 'google') {
+      params.set('oq', keyword.split(' ').slice(0, 2).join('+'));
+      params.set('source', 'hp');
+      params.set('ei', Math.random().toString(36).substring(2, 10));
+    }
+    
+    return `${engine.searchUrl}?${params.toString()}`;
+  },
+  
+  // Select search engine based on probability
+  selectSearchEngine: (): string => {
+    const rand = Math.random();
+    let cumulative = 0;
+    
+    for (const [engine, config] of Object.entries(SearchConsoleFootprintSimulator.referrerPatterns)) {
+      cumulative += config.probability;
+      if (rand <= cumulative) return engine;
+    }
+    return 'google';
+  },
+  
+  // Generate landing page attribution
+  generateLandingAttribution: (targetUrl: string, keyword: string): {
+    landingPage: string;
+    attributionType: string;
+    navigationPath: string[];
+    referrer: string;
+  } => {
+    const rand = Math.random();
+    const searchEngine = SearchConsoleFootprintSimulator.selectSearchEngine();
+    const referrer = SearchConsoleFootprintSimulator.generateReferrerURL(keyword, searchEngine);
+    
+    if (rand < SearchConsoleFootprintSimulator.attributionPatterns.directLanding) {
+      return {
+        landingPage: targetUrl,
+        attributionType: 'direct_landing',
+        navigationPath: [targetUrl],
+        referrer
+      };
+    } else if (rand < SearchConsoleFootprintSimulator.attributionPatterns.directLanding + 
+                      SearchConsoleFootprintSimulator.attributionPatterns.navigationalPath) {
+      // Simulate navigation path
+      const path: string[] = [];
+      const baseUrl = new URL(targetUrl).origin;
+      
+      // Add homepage visit first
+      if (Math.random() < 0.4) {
+        path.push(baseUrl);
+      }
+      
+      // Add intermediate pages
+      const intermediatePages = ['/blog', '/products', '/services', '/about'];
+      if (Math.random() < 0.3) {
+        path.push(baseUrl + intermediatePages[Math.floor(Math.random() * intermediatePages.length)]);
+      }
+      
+      path.push(targetUrl);
+      
+      return {
+        landingPage: path[0],
+        attributionType: 'navigational_path',
+        navigationPath: path,
+        referrer
+      };
+    } else if (rand < SearchConsoleFootprintSimulator.attributionPatterns.directLanding + 
+                      SearchConsoleFootprintSimulator.attributionPatterns.navigationalPath +
+                      SearchConsoleFootprintSimulator.attributionPatterns.contentDiscovery) {
+      // Content discovery
+      const baseUrl = new URL(targetUrl).origin;
+      const contentPages = ['/blog/latest', '/guides', '/resources', '/news'];
+      const landingPage = baseUrl + contentPages[Math.floor(Math.random() * contentPages.length)];
+      
+      return {
+        landingPage,
+        attributionType: 'content_discovery',
+        navigationPath: [landingPage, targetUrl],
+        referrer
+      };
+    } else {
+      // Bounce
+      return {
+        landingPage: targetUrl,
+        attributionType: 'bounce',
+        navigationPath: [targetUrl],
+        referrer
+      };
+    }
+  },
+  
+  // Generate query-to-landing mapping
+  generateQueryToLandingMapping: (keyword: string, landingPage: string): {
+    query: string;
+    normalizedQuery: string;
+    landingPage: string;
+    matchType: string;
+    relevanceScore: number;
+  } => {
+    const rand = Math.random();
+    let matchType: string;
+    let relevanceScore: number;
+    
+    if (rand < SearchConsoleFootprintSimulator.queryLandingPatterns.exactMatch) {
+      matchType = 'exact';
+      relevanceScore = 0.85 + Math.random() * 0.15;
+    } else if (rand < SearchConsoleFootprintSimulator.queryLandingPatterns.exactMatch +
+                       SearchConsoleFootprintSimulator.queryLandingPatterns.relatedMatch) {
+      matchType = 'related';
+      relevanceScore = 0.60 + Math.random() * 0.25;
+    } else if (rand < SearchConsoleFootprintSimulator.queryLandingPatterns.exactMatch +
+                       SearchConsoleFootprintSimulator.queryLandingPatterns.relatedMatch +
+                       SearchConsoleFootprintSimulator.queryLandingPatterns.broadMatch) {
+      matchType = 'broad';
+      relevanceScore = 0.30 + Math.random() * 0.30;
+    } else {
+      matchType = 'navigational';
+      relevanceScore = 0.90 + Math.random() * 0.10;
+    }
+    
+    // Normalize query
+    const normalizedQuery = keyword.toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    return {
+      query: keyword,
+      normalizedQuery,
+      landingPage,
+      matchType,
+      relevanceScore
+    };
+  },
+  
+  // Generate organic traffic footprint
+  generateOrganicFootprint: (
+    keyword: string,
+    targetUrl: string,
+    position: number
+  ): {
+    referrer: string;
+    searchEngine: string;
+    attribution: ReturnType<typeof SearchConsoleFootprintSimulator.generateLandingAttribution>;
+    queryMapping: ReturnType<typeof SearchConsoleFootprintSimulator.generateQueryToLandingMapping>;
+    gscMetrics: {
+      impressions: number;
+      clicks: number;
+      ctr: number;
+      avgPosition: number;
+    };
+  } => {
+    const searchEngine = SearchConsoleFootprintSimulator.selectSearchEngine();
+    const attribution = SearchConsoleFootprintSimulator.generateLandingAttribution(targetUrl, keyword);
+    const queryMapping = SearchConsoleFootprintSimulator.generateQueryToLandingMapping(keyword, attribution.landingPage);
+    
+    // Generate realistic GSC metrics
+    const impressions = Math.floor(50 + Math.random() * 500);
+    const ctr = EnhancedCTROptimizer.calculateCTR(position, false, false);
+    const clicks = Math.floor(impressions * ctr);
+    const avgPosition = position + (Math.random() * 2 - 1); // ±1 position variance
+    
+    return {
+      referrer: attribution.referrer,
+      searchEngine,
+      attribution,
+      queryMapping,
+      gscMetrics: {
+        impressions,
+        clicks,
+        ctr,
+        avgPosition
+      }
+    };
+  }
+};
+
+// ============================================================
+// END PHASE 4 MODULES
+// ============================================================
+
+// ============================================================
 // SEO DOMINATION MODULES (PHASE 1, 2, 3)
 // ============================================================
 
@@ -2202,7 +3065,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v22.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v23.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -3358,7 +4221,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v22.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v23.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -8240,7 +9103,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v22.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v23.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -8292,7 +9155,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v22.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v23.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -9987,7 +10850,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v22.0
+                        TrafficFlow Enterprise v23.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -10168,7 +11031,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v22.0
+Report generated by TrafficFlow Enterprise v23.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -11154,7 +12017,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v22.0
+                        TrafficFlow Enterprise v23.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
