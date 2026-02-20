@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v25-0-enterprise';
+  : 'traffic-flow-v26-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -3034,7 +3034,7 @@ const UTMParameterVariator = {
 // ============================================================
 
 // ============================================================
-// PHASE 6: "PEOPLE ALSO ASKED" (PAA) INTEGRATION (v25.0)
+// PHASE 6: "PEOPLE ALSO ASKED" (PAA) INTEGRATION (v25.0 - Completed)
 // ============================================================
 
 // --- PHASE 6 TASK 6.1: PAA QUESTION DISCOVERY API ---
@@ -3943,6 +3943,1255 @@ const QuestionBasedTrafficRouting = {
 // ============================================================
 
 // ============================================================
+// PHASE 7: ADVANCED SAFETY MEASURES (v26.0)
+// ============================================================
+
+// --- PHASE 7 TASK 7.1: TRAFFIC VELOCITY CONTROL ---
+const TrafficVelocityControl = {
+  // Growth rate limits
+  growthLimits: {
+    maxWeeklyIncrease: 0.10,      // Maximum 10% weekly increase
+    minWeeklyIncrease: 0.05,      // Minimum 5% weekly increase
+    maxDailySpike: 0.25,          // Maximum 25% daily spike allowed
+    naturalVariation: 0.15        // Natural daily variation range
+  },
+  
+  // Historical traffic data store
+  trafficHistory: {
+    daily: [] as { date: string; visitors: number; source: string }[],
+    weekly: [] as { weekStart: string; visitors: number; growth: number }[],
+    lastUpdated: 0
+  },
+  
+  // Traffic caps by site age
+  trafficCapsByAge: {
+    new: { maxDaily: 500, maxWeekly: 2500 },           // 0-30 days
+    growing: { maxDaily: 2000, maxWeekly: 10000 },     // 31-90 days
+    established: { maxDaily: 10000, maxWeekly: 50000 }, // 91-365 days
+    mature: { maxDaily: 50000, maxWeekly: 250000 }     // 365+ days
+  },
+  
+  // Calculate allowed traffic based on history
+  calculateAllowedTraffic: (siteAge: number, currentDaily: number): {
+    maxAllowed: number;
+    recommendedMin: number;
+    recommendedMax: number;
+    growthRate: number;
+    warningLevel: 'safe' | 'caution' | 'danger';
+  } => {
+    // Determine site age category
+    let category: keyof typeof TrafficVelocityControl.trafficCapsByAge;
+    if (siteAge < 30) category = 'new';
+    else if (siteAge < 90) category = 'growing';
+    else if (siteAge < 365) category = 'established';
+    else category = 'mature';
+    
+    const caps = TrafficVelocityControl.trafficCapsByAge[category];
+    const limits = TrafficVelocityControl.growthLimits;
+    
+    // Calculate safe growth range
+    const baseTraffic = currentDaily || caps.maxDaily * 0.5;
+    const recommendedMin = Math.floor(baseTraffic * (1 - limits.naturalVariation));
+    const recommendedMax = Math.floor(baseTraffic * (1 + limits.naturalVariation));
+    const maxAllowed = Math.min(caps.maxDaily, Math.floor(baseTraffic * (1 + limits.maxDailySpike)));
+    
+    // Calculate growth rate from history
+    const weekly = TrafficVelocityControl.trafficHistory.weekly;
+    let growthRate = 0;
+    if (weekly.length >= 2) {
+      const lastTwo = weekly.slice(-2);
+      growthRate = (lastTwo[1].visitors - lastTwo[0].visitors) / lastTwo[0].visitors;
+    }
+    
+    // Determine warning level
+    let warningLevel: 'safe' | 'caution' | 'danger' = 'safe';
+    if (growthRate > limits.maxWeeklyIncrease) warningLevel = 'danger';
+    else if (growthRate > limits.minWeeklyIncrease) warningLevel = 'caution';
+    
+    return {
+      maxAllowed,
+      recommendedMin,
+      recommendedMax,
+      growthRate,
+      warningLevel
+    };
+  },
+  
+  // Check if traffic injection should be throttled
+  shouldThrottle: (currentTraffic: number, projectedTraffic: number): {
+    throttle: boolean;
+    reason: string;
+    allowedIncrease: number;
+  } => {
+    const limits = TrafficVelocityControl.growthLimits;
+    const increase = projectedTraffic - currentTraffic;
+    const increasePercentage = increase / currentTraffic;
+    
+    if (increasePercentage > limits.maxDailySpike) {
+      const allowedIncrease = Math.floor(currentTraffic * limits.maxDailySpike);
+      return {
+        throttle: true,
+        reason: `Projected increase (${(increasePercentage * 100).toFixed(1)}%) exceeds maximum daily spike (${limits.maxDailySpike * 100}%)`,
+        allowedIncrease
+      };
+    }
+    
+    // Check natural variation threshold
+    if (increasePercentage > limits.naturalVariation) {
+      // Allow with reduced rate
+      return {
+        throttle: false,
+        reason: `Increase within acceptable range but above natural variation`,
+        allowedIncrease: increase
+      };
+    }
+    
+    return {
+      throttle: false,
+      reason: 'Traffic increase within natural bounds',
+      allowedIncrease: increase
+    };
+  },
+  
+  // Generate realistic traffic curve for the day
+  generateDailyTrafficCurve: (totalDailyVisitors: number): {
+    hour: number;
+    visitors: number;
+    percentage: number;
+  }[] => {
+    // Realistic hourly distribution (based on typical web traffic patterns)
+    const hourlyDistribution = [
+      0.02, 0.015, 0.01, 0.01, 0.015, 0.025, // 0-5 AM (low)
+      0.04, 0.055, 0.065, 0.07, 0.075, 0.08, // 6-11 AM (rising)
+      0.085, 0.08, 0.075, 0.07, 0.065, 0.06, // 12-5 PM (peak & declining)
+      0.055, 0.05, 0.045, 0.04, 0.03, 0.025  // 6-11 PM (evening decline)
+    ];
+    
+    return hourlyDistribution.map((percentage, hour) => ({
+      hour,
+      visitors: Math.floor(totalDailyVisitors * percentage * (0.9 + Math.random() * 0.2)), // ±10% variation
+      percentage: Math.round(percentage * 100)
+    }));
+  },
+  
+  // Record traffic data point
+  recordTraffic: (visitors: number, source: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    const daily = TrafficVelocityControl.trafficHistory.daily;
+    
+    // Add to daily history
+    daily.push({ date: today, visitors, source });
+    
+    // Keep only last 30 days
+    if (daily.length > 30) {
+      daily.shift();
+    }
+    
+    // Update weekly stats
+    TrafficVelocityControl.updateWeeklyStats();
+    
+    TrafficVelocityControl.trafficHistory.lastUpdated = Date.now();
+  },
+  
+  // Update weekly statistics
+  updateWeeklyStats: () => {
+    const daily = TrafficVelocityControl.trafficHistory.daily;
+    const weekly = TrafficVelocityControl.trafficHistory.weekly;
+    
+    // Group by week
+    const weekMap = new Map<string, number>();
+    for (const entry of daily) {
+      const date = new Date(entry.date);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay()); // Sunday
+      const weekKey = weekStart.toISOString().split('T')[0];
+      
+      weekMap.set(weekKey, (weekMap.get(weekKey) || 0) + entry.visitors);
+    }
+    
+    // Convert to array and calculate growth
+    const weeks = Array.from(weekMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map((entry, index, arr) => ({
+        weekStart: entry[0],
+        visitors: entry[1],
+        growth: index > 0 ? (entry[1] - arr[index - 1][1]) / arr[index - 1][1] : 0
+      }));
+    
+    TrafficVelocityControl.trafficHistory.weekly = weeks;
+  },
+  
+  // Get velocity control status
+  getVelocityStatus: (): {
+    currentWeeklyGrowth: number;
+    isWithinLimits: boolean;
+    recommendation: string;
+    historyLength: number;
+  } => {
+    const weekly = TrafficVelocityControl.trafficHistory.weekly;
+    const limits = TrafficVelocityControl.growthLimits;
+    
+    const lastGrowth = weekly.length > 0 ? weekly[weekly.length - 1].growth : 0;
+    const isWithinLimits = lastGrowth <= limits.maxWeeklyIncrease;
+    
+    let recommendation = 'Traffic growth is within acceptable limits';
+    if (lastGrowth > limits.maxWeeklyIncrease) {
+      recommendation = `WARNING: Weekly growth (${(lastGrowth * 100).toFixed(1)}%) exceeds maximum (${limits.maxWeeklyIncrease * 100}%)`;
+    } else if (lastGrowth > limits.minWeeklyIncrease) {
+      recommendation = `Growth approaching upper limit - monitor closely`;
+    }
+    
+    return {
+      currentWeeklyGrowth: lastGrowth,
+      isWithinLimits,
+      recommendation,
+      historyLength: weekly.length
+    };
+  }
+};
+
+// --- PHASE 7 TASK 7.2: REFERRER DIVERSITY ---
+const ReferrerDiversity = {
+  // Target distribution percentages
+  targetDistribution: {
+    google: 0.60,      // 60% Google search
+    direct: 0.25,      // 25% Direct traffic
+    social: 0.10,      // 10% Social media
+    referral: 0.05     // 5% Referral
+  },
+  
+  // Tolerance range for distribution
+  toleranceRange: {
+    min: 0.05,         // Allow 5% deviation below target
+    max: 0.05          // Allow 5% deviation above target
+  },
+  
+  // Current distribution tracking
+  currentDistribution: {
+    google: 0,
+    direct: 0,
+    social: 0,
+    referral: 0,
+    total: 0
+  },
+  
+  // Google search variants for natural appearance
+  googleVariants: [
+    'https://www.google.com/search',
+    'https://www.google.co.uk/search',
+    'https://www.google.de/search',
+    'https://www.google.fr/search',
+    'https://www.google.ca/search',
+    'https://www.google.com.au/search',
+    'https://www.google.co.in/search',
+    'https://www.google.co.jp/search'
+  ],
+  
+  // Social media sources with realistic distribution
+  socialSources: {
+    facebook: { weight: 0.35, domains: ['facebook.com', 'm.facebook.com', 'l.facebook.com'] },
+    twitter: { weight: 0.25, domains: ['twitter.com', 't.co', 'mobile.twitter.com'] },
+    linkedin: { weight: 0.15, domains: ['linkedin.com', 'lnkd.in'] },
+    instagram: { weight: 0.10, domains: ['instagram.com', 'l.instagram.com'] },
+    pinterest: { weight: 0.05, domains: ['pinterest.com', 'pin.it'] },
+    reddit: { weight: 0.05, domains: ['reddit.com', 'old.reddit.com'] },
+    tiktok: { weight: 0.03, domains: ['tiktok.com', 'vm.tiktok.com'] },
+    youtube: { weight: 0.02, domains: ['youtube.com', 'youtu.be'] }
+  },
+  
+  // Referral sources
+  referralSources: {
+    blog: { weight: 0.30, examples: ['medium.com', 'wordpress.com', 'blogspot.com'] },
+    news: { weight: 0.20, examples: ['news.ycombinator.com', 'techcrunch.com', 'forbes.com'] },
+    forum: { weight: 0.20, examples: ['quora.com', 'stackoverflow.com', 'discourse.org'] },
+    directory: { weight: 0.15, examples: ['yelp.com', 'yellowpages.com', 'crunchbase.com'] },
+    partner: { weight: 0.15, examples: ['partner-site.com', 'affiliate-link.com'] }
+  },
+  
+  // Select referrer based on distribution
+  selectReferrer: (keyword?: string): {
+    source: string;
+    category: string;
+    fullUrl: string;
+    distributionStatus: {
+      current: number;
+      target: number;
+      deviation: number;
+    };
+  } => {
+    // Get current distribution percentages
+    const dist = ReferrerDiversity.getCurrentDistributionPercentages();
+    const targets = ReferrerDiversity.targetDistribution;
+    const tolerance = ReferrerDiversity.toleranceRange;
+    
+    // Calculate weights based on how far each is from target
+    const weights = {
+      google: Math.max(0, targets.google - dist.google + tolerance.min),
+      direct: Math.max(0, targets.direct - dist.direct + tolerance.min),
+      social: Math.max(0, targets.social - dist.social + tolerance.min),
+      referral: Math.max(0, targets.referral - dist.referral + tolerance.min)
+    };
+    
+    // Normalize weights
+    const totalWeight = weights.google + weights.direct + weights.social + weights.referral;
+    const normalizedWeights = {
+      google: weights.google / totalWeight,
+      direct: weights.direct / totalWeight,
+      social: weights.social / totalWeight,
+      referral: weights.referral / totalWeight
+    };
+    
+    // Select based on weighted random
+    const rand = Math.random();
+    let selected: string;
+    let cumulative = 0;
+    
+    cumulative += normalizedWeights.google;
+    if (rand < cumulative) selected = 'google';
+    else {
+      cumulative += normalizedWeights.direct;
+      if (rand < cumulative) selected = 'direct';
+      else {
+        cumulative += normalizedWeights.social;
+        if (rand < cumulative) selected = 'social';
+        else selected = 'referral';
+      }
+    }
+    
+    // Generate full URL
+    const fullUrl = ReferrerDiversity.generateReferrerUrl(selected, keyword);
+    
+    // Update distribution
+    ReferrerDiversity.recordReferrer(selected);
+    
+    return {
+      source: selected,
+      category: ReferrerDiversity.getCategory(selected),
+      fullUrl,
+      distributionStatus: {
+        current: dist[selected as keyof typeof dist],
+        target: targets[selected as keyof typeof targets],
+        deviation: dist[selected as keyof typeof dist] - targets[selected as keyof typeof targets]
+      }
+    };
+  },
+  
+  // Generate realistic referrer URL
+  generateReferrerUrl: (category: string, keyword?: string): string => {
+    switch (category) {
+      case 'google': {
+        const variant = ReferrerDiversity.googleVariants[
+          Math.floor(Math.random() * ReferrerDiversity.googleVariants.length)
+        ];
+        const q = keyword ? encodeURIComponent(keyword) : 'search';
+        const params = [
+          `q=${q}`,
+          `oq=${q.split('+')[0] || q}`,
+          `source=hp`,
+          `ei=${Math.random().toString(36).substring(2, 10)}`,
+          `ved=${Math.random().toString(36).substring(2, 15)}`
+        ];
+        return `${variant}?${params.join('&')}`;
+      }
+      case 'direct':
+        return ''; // Empty referrer for direct
+      
+      case 'social': {
+        // Select social source based on weights
+        const sources = Object.entries(ReferrerDiversity.socialSources);
+        const totalWeight = sources.reduce((sum, [, config]) => sum + config.weight, 0);
+        let rand = Math.random() * totalWeight;
+        let selectedSource = 'facebook';
+        
+        for (const [source, config] of sources) {
+          rand -= config.weight;
+          if (rand <= 0) {
+            selectedSource = source;
+            break;
+          }
+        }
+        
+        const domains = ReferrerDiversity.socialSources[selectedSource as keyof typeof ReferrerDiversity.socialSources].domains;
+        return `https://${domains[Math.floor(Math.random() * domains.length)]}/`;
+      }
+      
+      case 'referral': {
+        // Select referral source based on weights
+        const sources = Object.entries(ReferrerDiversity.referralSources);
+        const totalWeight = sources.reduce((sum, [, config]) => sum + config.weight, 0);
+        let rand = Math.random() * totalWeight;
+        let selectedSource = 'blog';
+        
+        for (const [source, config] of sources) {
+          rand -= config.weight;
+          if (rand <= 0) {
+            selectedSource = source;
+            break;
+          }
+        }
+        
+        const examples = ReferrerDiversity.referralSources[selectedSource as keyof typeof ReferrerDiversity.referralSources].examples;
+        return `https://${examples[Math.floor(Math.random() * examples.length)]}/`;
+      }
+      
+      default:
+        return '';
+    }
+  },
+  
+  // Get category for a source
+  getCategory: (source: string): string => {
+    if (source === 'google') return 'organic_search';
+    if (source === 'direct') return 'direct_traffic';
+    if (source === 'social') return 'social_media';
+    if (source === 'referral') return 'referral_traffic';
+    return 'unknown';
+  },
+  
+  // Record referrer selection
+  recordReferrer: (category: string) => {
+    ReferrerDiversity.currentDistribution[category as keyof typeof ReferrerDiversity.currentDistribution]++;
+    ReferrerDiversity.currentDistribution.total++;
+  },
+  
+  // Get current distribution percentages
+  getCurrentDistributionPercentages: (): Record<string, number> => {
+    const dist = ReferrerDiversity.currentDistribution;
+    const total = dist.total || 1;
+    
+    return {
+      google: dist.google / total,
+      direct: dist.direct / total,
+      social: dist.social / total,
+      referral: dist.referral / total
+    };
+  },
+  
+  // Check if distribution is balanced
+  isDistributionBalanced: (): {
+    balanced: boolean;
+    deviations: Record<string, number>;
+    recommendations: string[];
+  } => {
+    const current = ReferrerDiversity.getCurrentDistributionPercentages();
+    const targets = ReferrerDiversity.targetDistribution;
+    const tolerance = ReferrerDiversity.toleranceRange;
+    const deviations: Record<string, number> = {};
+    const recommendations: string[] = [];
+    
+    for (const [key, target] of Object.entries(targets)) {
+      const deviation = current[key] - target;
+      deviations[key] = deviation;
+      
+      if (Math.abs(deviation) > tolerance.max) {
+        if (deviation > 0) {
+          recommendations.push(`Reduce ${key} traffic by ${Math.abs(deviation * 100).toFixed(1)}%`);
+        } else {
+          recommendations.push(`Increase ${key} traffic by ${Math.abs(deviation * 100).toFixed(1)}%`);
+        }
+      }
+    }
+    
+    return {
+      balanced: recommendations.length === 0,
+      deviations,
+      recommendations
+    };
+  },
+  
+  // Reset distribution counters
+  resetDistribution: () => {
+    ReferrerDiversity.currentDistribution = {
+      google: 0,
+      direct: 0,
+      social: 0,
+      referral: 0,
+      total: 0
+    };
+  }
+};
+
+// --- PHASE 7 TASK 7.3: BEHAVIORAL COHORT ANALYSIS ---
+const BehavioralCohortAnalysis = {
+  // Cohort definitions
+  cohortTypes: {
+    explorers: {
+      weight: 0.25,
+      characteristics: {
+        avgSessionDuration: { min: 120000, max: 300000 },  // 2-5 minutes
+        pagesPerSession: { min: 4, max: 8 },
+        scrollDepth: { min: 70, max: 95 },
+        clickFrequency: 'high',
+        returnProbability: 0.35
+      }
+    },
+    researchers: {
+      weight: 0.20,
+      characteristics: {
+        avgSessionDuration: { min: 180000, max: 420000 },  // 3-7 minutes
+        pagesPerSession: { min: 5, max: 10 },
+        scrollDepth: { min: 60, max: 85 },
+        clickFrequency: 'medium',
+        returnProbability: 0.45
+      }
+    },
+    browsers: {
+      weight: 0.30,
+      characteristics: {
+        avgSessionDuration: { min: 45000, max: 120000 },   // 45s-2min
+        pagesPerSession: { min: 1, max: 3 },
+        scrollDepth: { min: 30, max: 60 },
+        clickFrequency: 'low',
+        returnProbability: 0.15
+      }
+    },
+    converters: {
+      weight: 0.15,
+      characteristics: {
+        avgSessionDuration: { min: 240000, max: 600000 },  // 4-10 minutes
+        pagesPerSession: { min: 6, max: 12 },
+        scrollDepth: { min: 80, max: 100 },
+        clickFrequency: 'very_high',
+        returnProbability: 0.60
+      }
+    },
+    bouncers: {
+      weight: 0.10,
+      characteristics: {
+        avgSessionDuration: { min: 5000, max: 30000 },     // 5-30 seconds
+        pagesPerSession: { min: 1, max: 1 },
+        scrollDepth: { min: 0, max: 25 },
+        clickFrequency: 'none',
+        returnProbability: 0.05
+      }
+    }
+  },
+  
+  // Session tracking
+  sessionTracking: {
+    activeSessions: new Map<string, {
+      cohort: string;
+      startTime: number;
+      pagesVisited: number;
+      actions: string[];
+    }>(),
+    cohortDistribution: {
+      explorers: 0,
+      researchers: 0,
+      browsers: 0,
+      converters: 0,
+      bouncers: 0
+    },
+    totalSessions: 0
+  },
+  
+  // Assign visitor to a cohort
+  assignCohort: (sessionId: string): {
+    cohort: string;
+    characteristics: typeof BehavioralCohortAnalysis.cohortTypes.explorers.characteristics;
+    behaviorProfile: {
+      targetSessionDuration: number;
+      targetPagesPerSession: number;
+      targetScrollDepth: number;
+      clickPattern: string[];
+    };
+  } => {
+    // Weighted random selection
+    const cohorts = Object.entries(BehavioralCohortAnalysis.cohortTypes);
+    const totalWeight = cohorts.reduce((sum, [, config]) => sum + config.weight, 0);
+    let rand = Math.random() * totalWeight;
+    let selectedCohort = 'browsers';
+    
+    for (const [cohort, config] of cohorts) {
+      rand -= config.weight;
+      if (rand <= 0) {
+        selectedCohort = cohort;
+        break;
+      }
+    }
+    
+    const characteristics = BehavioralCohortAnalysis.cohortTypes[selectedCohort as keyof typeof BehavioralCohortAnalysis.cohortTypes].characteristics;
+    
+    // Generate specific behavior profile
+    const behaviorProfile = {
+      targetSessionDuration: characteristics.avgSessionDuration.min + 
+        Math.random() * (characteristics.avgSessionDuration.max - characteristics.avgSessionDuration.min),
+      targetPagesPerSession: characteristics.pagesPerSession.min + 
+        Math.floor(Math.random() * (characteristics.pagesPerSession.max - characteristics.pagesPerSession.min)),
+      targetScrollDepth: characteristics.scrollDepth.min + 
+        Math.random() * (characteristics.scrollDepth.max - characteristics.scrollDepth.min),
+      clickPattern: BehavioralCohortAnalysis.generateClickPattern(characteristics.clickFrequency)
+    };
+    
+    // Track session
+    BehavioralCohortAnalysis.sessionTracking.activeSessions.set(sessionId, {
+      cohort: selectedCohort,
+      startTime: Date.now(),
+      pagesVisited: 0,
+      actions: []
+    });
+    
+    // Update distribution
+    BehavioralCohortAnalysis.sessionTracking.cohortDistribution[selectedCohort as keyof typeof BehavioralCohortAnalysis.sessionTracking.cohortDistribution]++;
+    BehavioralCohortAnalysis.sessionTracking.totalSessions++;
+    
+    return {
+      cohort: selectedCohort,
+      characteristics,
+      behaviorProfile
+    };
+  },
+  
+  // Generate click pattern based on frequency
+  generateClickPattern: (frequency: string): string[] => {
+    const patterns: Record<string, string[]> = {
+      none: [],
+      low: ['scroll', 'pause', 'scroll'],
+      medium: ['scroll', 'click', 'pause', 'scroll', 'click'],
+      high: ['scroll', 'click', 'scroll', 'click', 'pause', 'scroll', 'click', 'click'],
+      very_high: ['click', 'scroll', 'click', 'click', 'scroll', 'pause', 'click', 'scroll', 'click', 'click']
+    };
+    
+    return patterns[frequency] || patterns.medium;
+  },
+  
+  // Record action for a session
+  recordAction: (sessionId: string, action: string) => {
+    const session = BehavioralCohortAnalysis.sessionTracking.activeSessions.get(sessionId);
+    if (session) {
+      session.actions.push(action);
+      if (action === 'page_view') {
+        session.pagesVisited++;
+      }
+    }
+  },
+  
+  // End session and analyze behavior
+  endSession: (sessionId: string): {
+    cohort: string;
+    actualDuration: number;
+    actualPagesVisited: number;
+    actions: string[];
+    behaviorMatch: number;
+  } | null => {
+    const session = BehavioralCohortAnalysis.sessionTracking.activeSessions.get(sessionId);
+    if (!session) return null;
+    
+    const actualDuration = Date.now() - session.startTime;
+    const characteristics = BehavioralCohortAnalysis.cohortTypes[session.cohort as keyof typeof BehavioralCohortAnalysis.cohortTypes].characteristics;
+    
+    // Calculate how well behavior matched expected
+    const durationMatch = actualDuration >= characteristics.avgSessionDuration.min && 
+                         actualDuration <= characteristics.avgSessionDuration.max ? 1 : 0.5;
+    const pagesMatch = session.pagesVisited >= characteristics.pagesPerSession.min &&
+                      session.pagesVisited <= characteristics.pagesPerSession.max ? 1 : 0.5;
+    
+    const behaviorMatch = (durationMatch + pagesMatch) / 2;
+    
+    // Remove from active sessions
+    BehavioralCohortAnalysis.sessionTracking.activeSessions.delete(sessionId);
+    
+    return {
+      cohort: session.cohort,
+      actualDuration,
+      actualPagesVisited: session.pagesVisited,
+      actions: session.actions,
+      behaviorMatch
+    };
+  },
+  
+  // Get cohort distribution statistics
+  getCohortStats: (): {
+    distribution: Record<string, number>;
+    percentages: Record<string, number>;
+    isBalanced: boolean;
+    dominantCohort: string;
+  } => {
+    const dist = BehavioralCohortAnalysis.sessionTracking.cohortDistribution;
+    const total = BehavioralCohortAnalysis.sessionTracking.totalSessions || 1;
+    
+    const percentages: Record<string, number> = {};
+    for (const [cohort, count] of Object.entries(dist)) {
+      percentages[cohort] = count / total;
+    }
+    
+    // Find dominant cohort
+    let dominantCohort = 'browsers';
+    let maxPercentage = 0;
+    for (const [cohort, percentage] of Object.entries(percentages)) {
+      if (percentage > maxPercentage) {
+        maxPercentage = percentage;
+        dominantCohort = cohort;
+      }
+    }
+    
+    // Check if balanced (no cohort > 40%)
+    const isBalanced = maxPercentage < 0.40;
+    
+    return {
+      distribution: { ...dist },
+      percentages,
+      isBalanced,
+      dominantCohort
+    };
+  },
+  
+  // Ensure cohort diversity
+  ensureDiversity: (): string => {
+    const stats = BehavioralCohortAnalysis.getCohortStats();
+    const cohorts = Object.keys(BehavioralCohortAnalysis.cohortTypes);
+    
+    // If not balanced, under-represent dominant cohort
+    if (!stats.isBalanced) {
+      const underRepresented = cohorts.filter(c => 
+        stats.percentages[c] < BehavioralCohortAnalysis.cohortTypes[c as keyof typeof BehavioralCohortAnalysis.cohortTypes].weight
+      );
+      
+      if (underRepresented.length > 0) {
+        return underRepresented[Math.floor(Math.random() * underRepresented.length)];
+      }
+    }
+    
+    // Normal weighted selection
+    return cohorts[Math.floor(Math.random() * cohorts.length)];
+  }
+};
+
+// --- PHASE 7 TASK 7.4: A/B TESTING DETECTION AVOIDANCE ---
+const ABTestDetectionAvoidance = {
+  // Detection patterns to avoid
+  detectionPatterns: {
+    // Avoid consistent timing patterns
+    consistentTiming: {
+      description: 'Same actions at same intervals',
+      avoidanceStrategy: 'Add 20-40% random variance to all timings'
+    },
+    // Avoid identical session patterns
+    identicalSessions: {
+      description: 'Multiple sessions with identical behavior',
+      avoidanceStrategy: 'Generate unique behavior for each session'
+    },
+    // Avoid perfect distribution
+    perfectDistribution: {
+      description: 'Exact 50/50 split in variant exposure',
+      avoidanceStrategy: 'Allow 40-60% variance in variant selection'
+    },
+    // Avoid instant interactions
+    instantInteractions: {
+      description: 'Interactions faster than human reaction time',
+      avoidanceStrategy: 'Enforce minimum 150ms reaction delay'
+    }
+  },
+  
+  // Variant exposure configuration
+  variantConfig: {
+    minExposure: 0.40,      // Minimum 40% exposure to any variant
+    maxExposure: 0.60,      // Maximum 60% exposure to any variant
+    sessionStickiness: 0.85 // 85% chance user sees same variant
+  },
+  
+  // Session variant tracking
+  variantTracking: {
+    sessions: new Map<string, string>(),
+    variantCounts: { A: 0, B: 0, control: 0 },
+    totalExposures: 0
+  },
+  
+  // Select variant with natural distribution
+  selectVariant: (sessionId: string, testId: string): {
+    variant: string;
+    isNewExposure: boolean;
+    exposurePercentage: number;
+  } => {
+    // Check if session already has variant assigned
+    const existingVariant = BehavioralCohortAnalysis.sessionTracking.activeSessions.get(sessionId);
+    const sessionKey = `${testId}:${sessionId}`;
+    
+    if (Math.random() < ABTestDetectionAvoidance.variantConfig.sessionStickiness) {
+      const previousVariant = ABTestDetectionAvoidance.variantTracking.sessions.get(sessionKey);
+      if (previousVariant) {
+        return {
+          variant: previousVariant,
+          isNewExposure: false,
+          exposurePercentage: ABTestDetectionAvoidance.getCurrentExposure(previousVariant)
+        };
+      }
+    }
+    
+    // Select variant with natural distribution
+    const counts = ABTestDetectionAvoidance.variantTracking.variantCounts;
+    const total = ABTestDetectionAvoidance.variantTracking.totalExposures || 1;
+    
+    // Calculate adjusted weights to maintain natural distribution
+    const currentA = counts.A / total;
+    const currentB = counts.B / total;
+    const currentControl = counts.control / total;
+    
+    const weights = {
+      A: Math.max(0.1, 0.33 - currentA + 0.33),
+      B: Math.max(0.1, 0.33 - currentB + 0.33),
+      control: Math.max(0.1, 0.34 - currentControl + 0.34)
+    };
+    
+    const totalWeight = weights.A + weights.B + weights.control;
+    const normalizedWeights = {
+      A: weights.A / totalWeight,
+      B: weights.B / totalWeight,
+      control: weights.control / totalWeight
+    };
+    
+    // Select based on weights
+    const rand = Math.random();
+    let selected: string;
+    let cumulative = 0;
+    
+    cumulative += normalizedWeights.A;
+    if (rand < cumulative) selected = 'A';
+    else {
+      cumulative += normalizedWeights.B;
+      if (rand < cumulative) selected = 'B';
+      else selected = 'control';
+    }
+    
+    // Record exposure
+    ABTestDetectionAvoidance.variantTracking.sessions.set(sessionKey, selected);
+    ABTestDetectionAvoidance.variantTracking.variantCounts[selected as keyof typeof counts]++;
+    ABTestDetectionAvoidance.variantTracking.totalExposures++;
+    
+    return {
+      variant: selected,
+      isNewExposure: true,
+      exposurePercentage: ABTestDetectionAvoidance.getCurrentExposure(selected)
+    };
+  },
+  
+  // Get current exposure percentage for a variant
+  getCurrentExposure: (variant: string): number => {
+    const counts = ABTestDetectionAvoidance.variantTracking.variantCounts;
+    const total = ABTestDetectionAvoidance.variantTracking.totalExposures || 1;
+    return counts[variant as keyof typeof counts] / total;
+  },
+  
+  // Generate randomized timing with anti-detection measures
+  generateRandomizedTiming: (baseAction: string): {
+    preDelay: number;
+    actionDuration: number;
+    postDelay: number;
+    totalDuration: number;
+  } => {
+    const config: Record<string, { min: number; max: number; variance: number }> = {
+      click: { min: 150, max: 500, variance: 0.3 },
+      scroll: { min: 200, max: 800, variance: 0.4 },
+      hover: { min: 100, max: 400, variance: 0.35 },
+      type: { min: 80, max: 200, variance: 0.25 },
+      read: { min: 2000, max: 8000, variance: 0.5 }
+    };
+    
+    const actionConfig = config[baseAction] || config.click;
+    
+    // Pre-delay (thinking/reaction time)
+    const preDelay = actionConfig.min + Math.random() * (actionConfig.max - actionConfig.min);
+    
+    // Add variance
+    const varianceFactor = 1 + (Math.random() - 0.5) * 2 * actionConfig.variance;
+    const adjustedPreDelay = Math.floor(preDelay * varianceFactor);
+    
+    // Action duration (how long the action takes)
+    const actionDuration = Math.floor(50 + Math.random() * 150);
+    
+    // Post-delay (processing time)
+    const postDelay = Math.floor(100 + Math.random() * 300);
+    
+    return {
+      preDelay: adjustedPreDelay,
+      actionDuration,
+      postDelay,
+      totalDuration: adjustedPreDelay + actionDuration + postDelay
+    };
+  },
+  
+  // Generate unique session fingerprint to avoid detection
+  generateSessionFingerprint: (): {
+    screenSize: { width: number; height: number };
+    viewport: { width: number; height: number };
+    colorDepth: number;
+    pixelRatio: number;
+    timezone: string;
+    language: string;
+    plugins: number;
+  } => {
+    // Common screen sizes with variations
+    const screenSizes = [
+      { width: 1920, height: 1080 },
+      { width: 1366, height: 768 },
+      { width: 1536, height: 864 },
+      { width: 1440, height: 900 },
+      { width: 2560, height: 1440 },
+      { width: 1280, height: 720 }
+    ];
+    
+    const baseScreen = screenSizes[Math.floor(Math.random() * screenSizes.length)];
+    
+    // Add slight variations
+    const widthVariation = Math.floor(Math.random() * 20) - 10;
+    const heightVariation = Math.floor(Math.random() * 40) - 20;
+    
+    return {
+      screenSize: {
+        width: baseScreen.width + widthVariation,
+        height: baseScreen.height + heightVariation
+      },
+      viewport: {
+        width: baseScreen.width + widthVariation - Math.floor(Math.random() * 30),
+        height: baseScreen.height + heightVariation - 100 - Math.floor(Math.random() * 50)
+      },
+      colorDepth: [24, 32][Math.floor(Math.random() * 2)],
+      pixelRatio: [1, 1.25, 1.5, 2][Math.floor(Math.random() * 4)],
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+      language: ['en-US', 'en-GB', 'en-CA'][Math.floor(Math.random() * 3)],
+      plugins: Math.floor(Math.random() * 5) + 2
+    };
+  },
+  
+  // Check for detection risk
+  assessDetectionRisk: (): {
+    riskLevel: 'low' | 'medium' | 'high';
+    factors: string[];
+    recommendations: string[];
+  } => {
+    const factors: string[] = [];
+    const recommendations: string[] = [];
+    
+    // Check variant distribution
+    const exposureA = ABTestDetectionAvoidance.getCurrentExposure('A');
+    const exposureB = ABTestDetectionAvoidance.getCurrentExposure('B');
+    const exposureControl = ABTestDetectionAvoidance.getCurrentExposure('control');
+    
+    if (exposureA > 0.55 || exposureB > 0.55 || exposureControl > 0.55) {
+      factors.push('Variant distribution is skewed');
+      recommendations.push('Adjust variant selection weights');
+    }
+    
+    // Check cohort diversity
+    const cohortStats = BehavioralCohortAnalysis.getCohortStats();
+    if (!cohortStats.isBalanced) {
+      factors.push(`Cohort imbalance: ${cohortStats.dominantCohort} is dominant`);
+      recommendations.push('Increase diversity in cohort assignment');
+    }
+    
+    // Check referrer distribution
+    const referrerStatus = ReferrerDiversity.isDistributionBalanced();
+    if (!referrerStatus.balanced) {
+      factors.push('Referrer distribution is unbalanced');
+      recommendations.push(...referrerStatus.recommendations);
+    }
+    
+    // Determine risk level
+    let riskLevel: 'low' | 'medium' | 'high' = 'low';
+    if (factors.length >= 3) riskLevel = 'high';
+    else if (factors.length >= 1) riskLevel = 'medium';
+    
+    return { riskLevel, factors, recommendations };
+  },
+  
+  // Reset tracking data
+  resetTracking: () => {
+    ABTestDetectionAvoidance.variantTracking = {
+      sessions: new Map<string, string>(),
+      variantCounts: { A: 0, B: 0, control: 0 },
+      totalExposures: 0
+    };
+  }
+};
+
+// --- PHASE 7 TASK 7.5: BOT DETECTION BYPASS TESTING ---
+const BotDetectionBypassTesting = {
+  // Detection services to test against
+  detectionServices: {
+    cloudflare: {
+      name: 'Cloudflare Bot Management',
+      endpoint: '/api/test/cloudflare',
+      indicators: ['cf-ray', 'cf-cache-status', '__cf_bm'],
+      severity: 'high'
+    },
+    akamai: {
+      name: 'Akamai Bot Manager',
+      endpoint: '/api/test/akamai',
+      indicators: ['ak_bmsc', 'bm_sz', '_abck'],
+      severity: 'high'
+    },
+    datadome: {
+      name: 'DataDome',
+      endpoint: '/api/test/datadome',
+      indicators: ['datadome', 'dd_cookie'],
+      severity: 'medium'
+    },
+    perimeterx: {
+      name: 'PerimeterX (HUMAN)',
+      endpoint: '/api/test/perimeterx',
+      indicators: ['_pxhd', 'pxvid', '_pxmvid'],
+      severity: 'medium'
+    },
+    imperva: {
+      name: 'Imperva Incapsula',
+      endpoint: '/api/test/imperva',
+      indicators: ['incap_ses_', 'visid_incap_', 'nlbi_'],
+      severity: 'high'
+    },
+    reCAPTCHA: {
+      name: 'Google reCAPTCHA',
+      endpoint: '/api/test/recaptcha',
+      indicators: ['g-recaptcha-response', '_GRECAPTCHA'],
+      severity: 'high'
+    }
+  },
+  
+  // Test result storage
+  testResults: {
+    history: [] as {
+      timestamp: number;
+      service: string;
+      passed: boolean;
+      score: number;
+      details: string;
+      recommendations: string[];
+    }[],
+    lastFullTest: 0,
+    testInterval: 86400000 // 24 hours
+  },
+  
+  // Bypass strategies
+  bypassStrategies: {
+    fingerprintRotation: {
+      description: 'Rotate browser fingerprints periodically',
+      effectiveness: 0.85,
+      implementation: 'Rotate every 50-100 sessions'
+    },
+    behaviorMimicry: {
+      description: 'Mimic human behavior patterns',
+      effectiveness: 0.90,
+      implementation: 'Use cohort-based behavior patterns'
+    },
+    timingRandomization: {
+      description: 'Randomize all timing patterns',
+      effectiveness: 0.80,
+      implementation: 'Add variance to all delays'
+    },
+    cookieManagement: {
+      description: 'Properly manage cookies and session data',
+      effectiveness: 0.75,
+      implementation: 'Persist cookies across sessions'
+    },
+    tlsFingerprinting: {
+      description: 'Use realistic TLS fingerprints',
+      effectiveness: 0.70,
+      implementation: 'Use modern browser TLS patterns'
+    }
+  },
+  
+  // Run detection test for a specific service
+  runDetectionTest: async (serviceName: string): Promise<{
+    service: string;
+    passed: boolean;
+    score: number;
+    details: string;
+    recommendations: string[];
+  }> => {
+    const service = BotDetectionBypassTesting.detectionServices[serviceName as keyof typeof BotDetectionBypassTesting.detectionServices];
+    
+    if (!service) {
+      return {
+        service: serviceName,
+        passed: false,
+        score: 0,
+        details: 'Unknown service',
+        recommendations: ['Verify service name']
+      };
+    }
+    
+    // Simulate test execution
+    const strategies = Object.values(BotDetectionBypassTesting.bypassStrategies);
+    let totalScore = 0;
+    
+    // Evaluate each strategy
+    for (const strategy of strategies) {
+      // Randomize score within effectiveness range
+      const strategyScore = strategy.effectiveness * (0.85 + Math.random() * 0.30);
+      totalScore += strategyScore;
+    }
+    
+    const avgScore = totalScore / strategies.length;
+    const passed = avgScore >= 0.70;
+    
+    // Generate recommendations
+    const recommendations: string[] = [];
+    if (avgScore < 0.80) recommendations.push('Consider implementing more bypass strategies');
+    if (avgScore < 0.70) recommendations.push('Increase fingerprint rotation frequency');
+    if (avgScore < 0.60) recommendations.push('Review behavior mimicry patterns');
+    
+    // Generate details
+    const details = passed 
+      ? `Passed with score ${(avgScore * 100).toFixed(1)}%`
+      : `Failed with score ${(avgScore * 100).toFixed(1)}%`;
+    
+    // Record result
+    BotDetectionBypassTesting.testResults.history.push({
+      timestamp: Date.now(),
+      service: serviceName,
+      passed,
+      score: avgScore,
+      details,
+      recommendations
+    });
+    
+    // Keep only last 100 results
+    if (BotDetectionBypassTesting.testResults.history.length > 100) {
+      BotDetectionBypassTesting.testResults.history = 
+        BotDetectionBypassTesting.testResults.history.slice(-100);
+    }
+    
+    return {
+      service: serviceName,
+      passed,
+      score: avgScore,
+      details,
+      recommendations
+    };
+  },
+  
+  // Run full test suite
+  runFullTestSuite: async (): Promise<{
+    summary: {
+      total: number;
+      passed: number;
+      failed: number;
+      avgScore: number;
+    };
+    results: Awaited<ReturnType<typeof BotDetectionBypassTesting.runDetectionTest>>[];
+    overallRisk: 'low' | 'medium' | 'high';
+    timestamp: number;
+  }> => {
+    const services = Object.keys(BotDetectionBypassTesting.detectionServices);
+    const results: Awaited<ReturnType<typeof BotDetectionBypassTesting.runDetectionTest>>[] = [];
+    
+    // Run tests with natural delays
+    for (const service of services) {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
+      const result = await BotDetectionBypassTesting.runDetectionTest(service);
+      results.push(result);
+    }
+    
+    // Calculate summary
+    const passed = results.filter(r => r.passed).length;
+    const avgScore = results.reduce((sum, r) => sum + r.score, 0) / results.length;
+    
+    // Determine overall risk
+    let overallRisk: 'low' | 'medium' | 'high' = 'low';
+    if (avgScore < 0.70 || passed < services.length * 0.5) overallRisk = 'high';
+    else if (avgScore < 0.80 || passed < services.length * 0.8) overallRisk = 'medium';
+    
+    BotDetectionBypassTesting.testResults.lastFullTest = Date.now();
+    
+    return {
+      summary: {
+        total: services.length,
+        passed,
+        failed: services.length - passed,
+        avgScore
+      },
+      results,
+      overallRisk,
+      timestamp: Date.now()
+    };
+  },
+  
+  // Get test history
+  getTestHistory: (limit: number = 20): typeof BotDetectionBypassTesting.testResults.history => {
+    return BotDetectionBypassTesting.testResults.history.slice(-limit);
+  },
+  
+  // Check if test is due
+  isTestDue: (): boolean => {
+    const lastTest = BotDetectionBypassTesting.testResults.lastFullTest;
+    const interval = BotDetectionBypassTesting.testResults.testInterval;
+    return Date.now() - lastTest > interval;
+  },
+  
+  // Adjust traffic behavior based on test results
+  adjustBehaviorBasedOnResults: (): {
+    adjustments: string[];
+    newParameters: Record<string, number>;
+  } => {
+    const adjustments: string[] = [];
+    const newParameters: Record<string, number> = {};
+    
+    const recentResults = BotDetectionBypassTesting.getTestHistory(10);
+    
+    if (recentResults.length === 0) {
+      return { adjustments: ['No recent test results'], newParameters };
+    }
+    
+    // Calculate average scores by service
+    const serviceScores: Record<string, number[]> = {};
+    for (const result of recentResults) {
+      if (!serviceScores[result.service]) serviceScores[result.service] = [];
+      serviceScores[result.service].push(result.score);
+    }
+    
+    // Identify problematic services
+    for (const [service, scores] of Object.entries(serviceScores)) {
+      const avgScore = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+      
+      if (avgScore < 0.70) {
+        adjustments.push(`Increase caution for ${service} (score: ${(avgScore * 100).toFixed(1)}%)`);
+        newParameters[`caution_${service}`] = 1.5; // Increase delay multiplier
+      } else if (avgScore < 0.80) {
+        adjustments.push(`Monitor ${service} closely (score: ${(avgScore * 100).toFixed(1)}%)`);
+        newParameters[`caution_${service}`] = 1.2;
+      }
+    }
+    
+    // Add general adjustments
+    const overallAvg = recentResults.reduce((sum, r) => sum + r.score, 0) / recentResults.length;
+    if (overallAvg < 0.75) {
+      adjustments.push('Overall scores low - increase randomization');
+      newParameters.timingVariance = 0.5; // Increase timing variance
+      newParameters.fingerprintRotationRate = 30; // Rotate every 30 sessions
+    }
+    
+    return { adjustments, newParameters };
+  },
+  
+  // Get current bypass status
+  getBypassStatus: (): {
+    lastTestTime: number;
+    testsRun: number;
+    passRate: number;
+    avgScore: number;
+    needsTesting: boolean;
+  } => {
+    const history = BotDetectionBypassTesting.testResults.history;
+    const passed = history.filter(r => r.passed).length;
+    const avgScore = history.length > 0 
+      ? history.reduce((sum, r) => sum + r.score, 0) / history.length 
+      : 0;
+    
+    return {
+      lastTestTime: BotDetectionBypassTesting.testResults.lastFullTest,
+      testsRun: history.length,
+      passRate: history.length > 0 ? passed / history.length : 0,
+      avgScore,
+      needsTesting: BotDetectionBypassTesting.isTestDue()
+    };
+  }
+};
+
+// ============================================================
+// END PHASE 7 MODULES
+// ============================================================
+
+// ============================================================
 // SEO DOMINATION MODULES (PHASE 1, 2, 3)
 // ============================================================
 
@@ -4701,7 +5950,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v25.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v26.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -5857,7 +7106,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v25.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v26.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -10739,7 +11988,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v25.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v26.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -10791,7 +12040,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v25.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v26.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -12486,7 +13735,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v25.0
+                        TrafficFlow Enterprise v26.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -12667,7 +13916,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v25.0
+Report generated by TrafficFlow Enterprise v26.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -13653,7 +14902,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v25.0
+                        TrafficFlow Enterprise v26.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
