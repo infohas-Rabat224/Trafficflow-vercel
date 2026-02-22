@@ -11544,34 +11544,63 @@ const MainContent = () => {
   // SCHEDULED CAMPAIGN CHECKER (v30.0 Enterprise)
   // ============================================================
   
-  // Check for scheduled campaigns that need to start
+  // Ref to track if we're currently checking
+  const scheduledCheckRef = useRef(false);
+  
+  // Check for scheduled campaigns that need to start - runs on every render
   useEffect(() => {
+    // Prevent multiple simultaneous checks
+    if (scheduledCheckRef.current) return;
+    
     const checkScheduledCampaigns = () => {
+      scheduledCheckRef.current = true;
+      
       const now = new Date();
       const nowISO = now.toISOString();
       
       // Find campaigns that are scheduled and their time has come
       const campaignsToActivate = campaigns.filter(c => {
-        if (c.status !== 'scheduled' || !c.nextRunAt) return false;
-        const scheduledTime = new Date(c.nextRunAt);
+        // Check if campaign is scheduled with enabled scheduling
+        if (!c.scheduledEnabled) return false;
+        if (c.status !== 'scheduled') return false;
+        if (!c.nextRunAt && !c.scheduledDate) return false;
+        
+        // Parse the scheduled time
+        let scheduledTime: Date;
+        if (c.nextRunAt) {
+          scheduledTime = new Date(c.nextRunAt);
+        } else if (c.scheduledDate && c.scheduledTime) {
+          scheduledTime = new Date(`${c.scheduledDate}T${c.scheduledTime}:00`);
+        } else {
+          return false;
+        }
+        
+        // Check if scheduled time has passed
         return scheduledTime <= now;
       });
       
       if (campaignsToActivate.length > 0) {
+        console.log(`[Scheduler] Activating ${campaignsToActivate.length} scheduled campaign(s)`);
+        
         // Start the engine if not running
-        if (!isEngineRunning) {
-          setIsEngineRunning(true);
-          addToast?.('Engine started for scheduled campaigns', 'success');
-        }
+        setIsEngineRunning(prev => {
+          if (!prev) {
+            addToast?.('🚀 Engine auto-started for scheduled campaigns', 'success');
+            return true;
+          }
+          return prev;
+        });
         
         // Update campaign statuses to active
         setCampaigns(prev => prev.map(c => {
           if (campaignsToActivate.some(scheduled => scheduled.id === c.id)) {
+            console.log(`[Scheduler] Activating campaign: ${c.name}`);
             return {
               ...c,
               status: 'active' as const,
               lastRunAt: nowISO,
-              nextRunAt: undefined
+              nextRunAt: undefined,
+              scheduledEnabled: false // Disable scheduling after activation
             };
           }
           return c;
@@ -11579,19 +11608,32 @@ const MainContent = () => {
         
         // Show toast for each activated campaign
         campaignsToActivate.forEach(c => {
-          addToast?.(`Scheduled campaign "${c.name}" started!`, 'success');
+          addToast?.(`⏰ Scheduled campaign "${c.name}" is now running!`, 'success');
         });
       }
+      
+      scheduledCheckRef.current = false;
     };
     
-    // Check immediately
+    // Check immediately on mount
     checkScheduledCampaigns();
     
-    // Check every 30 seconds
-    const interval = setInterval(checkScheduledCampaigns, 30000);
+    // Check every 10 seconds (more frequent for better reliability)
+    const interval = setInterval(checkScheduledCampaigns, 10000);
     
-    return () => clearInterval(interval);
-  }, [campaigns, isEngineRunning, addToast]);
+    return () => {
+      clearInterval(interval);
+      scheduledCheckRef.current = false;
+    };
+  }, [campaigns]); // Only depend on campaigns
+  
+  // Separate effect to handle engine start without circular dependency
+  useEffect(() => {
+    // Log engine state changes for debugging
+    if (isEngineRunning) {
+      console.log('[Engine] Running');
+    }
+  }, [isEngineRunning]);
   
   // Function to manually trigger scheduled campaigns via API (for cron jobs)
   const triggerScheduledCampaigns = async () => {
@@ -13409,6 +13451,60 @@ End of Report
           <SidebarItem icon={Terminal} label="Logs" active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} />
         </nav>
         <div className="p-3 border-t border-slate-200 bg-white sticky bottom-0">
+           {/* Scheduled Campaigns Indicator */}
+           {campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length > 0 && (
+             <div className="mb-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
+               <div className="flex items-center justify-between mb-1">
+                 <span className="text-[10px] font-bold text-purple-700 flex items-center gap-1">
+                   <Calendar size={10} />
+                   Scheduled: {campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length}
+                 </span>
+                 <button 
+                   onClick={() => {
+                     // Force check scheduled campaigns
+                     const now = new Date();
+                     const nowISO = now.toISOString();
+                     const toActivate = campaigns.filter(c => {
+                       if (!c.scheduledEnabled || c.status !== 'scheduled') return false;
+                       if (c.nextRunAt) return new Date(c.nextRunAt) <= now;
+                       if (c.scheduledDate && c.scheduledTime) {
+                         return new Date(`${c.scheduledDate}T${c.scheduledTime}:00`) <= now;
+                       }
+                       return false;
+                     });
+                     
+                     if (toActivate.length > 0) {
+                       setIsEngineRunning(true);
+                       setCampaigns(prev => prev.map(c => {
+                         if (toActivate.some(s => s.id === c.id)) {
+                           return { ...c, status: 'active' as const, lastRunAt: nowISO, scheduledEnabled: false };
+                         }
+                         return c;
+                       }));
+                       addToast?.(`✅ Activated ${toActivate.length} scheduled campaign(s)!`, 'success');
+                     } else {
+                       addToast?.('⏰ No campaigns ready to activate yet', 'info');
+                     }
+                   }}
+                   className="text-[9px] font-bold text-purple-600 hover:text-purple-800 underline"
+                 >
+                   Check Now
+                 </button>
+               </div>
+               <div className="text-[9px] text-purple-600">
+                 Next: {(() => {
+                   const scheduled = campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled && c.scheduledDate);
+                   if (scheduled.length === 0) return 'No schedule';
+                   const next = scheduled.sort((a, b) => {
+                     const aTime = a.nextRunAt || `${a.scheduledDate}T${a.scheduledTime}:00`;
+                     const bTime = b.nextRunAt || `${b.scheduledDate}T${b.scheduledTime}:00`;
+                     return new Date(aTime).getTime() - new Date(bTime).getTime();
+                   })[0];
+                   return `${next.scheduledDate} ${next.scheduledTime}`;
+                 })()}
+               </div>
+             </div>
+           )}
            <button onClick={handleLogout} className="w-full py-2 rounded-lg text-[10px] font-bold mb-2 shadow-sm bg-rose-100 text-rose-600 flex items-center justify-center gap-2 hover:bg-rose-200 transition-colors"><LogOut size={12}/> Logout</button>
            {!isAdmin && <button onClick={() => setShowAdminLogin(true)} className="w-full py-2 rounded-lg text-[10px] font-bold mb-2 shadow-sm bg-slate-800 text-white flex items-center justify-center gap-2 hover:bg-slate-700 transition-colors"><Shield size={12}/> Admin Access</button>}
            {isAdmin && <button onClick={() => { setIsAdmin(false); setActiveTab('dashboard'); }} className="w-full py-2 rounded-lg text-[10px] font-bold mb-2 shadow-sm bg-slate-100 text-slate-600 flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">Exit Admin</button>}
