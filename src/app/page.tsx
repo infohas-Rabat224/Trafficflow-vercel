@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v30-0-enterprise';
+  : 'traffic-flow-v31-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -295,6 +295,448 @@ const FingerprintRotator = {
     const depth = Math.random() > 0.8 ? '30-bit' : '24-bit';
     
     return { ...profile, osName: os, ul: lang, sd: depth };
+  }
+};
+
+// ============================================================
+// USER AGENT & BROWSER FINGERPRINT CONFIG (v31.0)
+// Comprehensive UA management for 100% organic detection
+// ============================================================
+
+interface UserAgentProfile {
+  id: string;
+  name: string;
+  browser: 'Chrome' | 'Firefox' | 'Safari' | 'Edge' | 'Opera' | 'Samsung';
+  version: string;
+  platform: 'Windows' | 'MacOS' | 'Linux' | 'iOS' | 'Android';
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  userAgent: string;
+  screenResolutions: string[];
+  viewportBase: string;
+  marketShare: number; // Percentage weight for realistic distribution
+}
+
+const UserAgentDatabase: UserAgentProfile[] = [
+  // ========== CHROME - DESKTOP (65% market share) ==========
+  {
+    id: 'chrome-win-131',
+    name: 'Chrome 131 (Windows 11)',
+    browser: 'Chrome',
+    version: '131.0.0.0',
+    platform: 'Windows',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    screenResolutions: ['1920x1080', '2560x1440', '1366x768', '1536x864', '1440x900'],
+    viewportBase: '1920x969',
+    marketShare: 28
+  },
+  {
+    id: 'chrome-win-130',
+    name: 'Chrome 130 (Windows 10)',
+    browser: 'Chrome',
+    version: '130.0.0.0',
+    platform: 'Windows',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    screenResolutions: ['1920x1080', '1366x768', '1536x864'],
+    viewportBase: '1920x969',
+    marketShare: 15
+  },
+  {
+    id: 'chrome-mac-131',
+    name: 'Chrome 131 (macOS Sonoma)',
+    browser: 'Chrome',
+    version: '131.0.0.0',
+    platform: 'MacOS',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    screenResolutions: ['2560x1440', '1920x1080', '1680x1050', '1440x900'],
+    viewportBase: '2560x1305',
+    marketShare: 10
+  },
+  {
+    id: 'chrome-mac-m1',
+    name: 'Chrome 131 (Mac M1/M2)',
+    browser: 'Chrome',
+    version: '131.0.0.0',
+    platform: 'MacOS',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    screenResolutions: ['2560x1440', '3024x1964', '3456x2234'],
+    viewportBase: '2560x1305',
+    marketShare: 5
+  },
+  
+  // ========== CHROME - MOBILE (Android) ==========
+  {
+    id: 'chrome-android-14',
+    name: 'Chrome 131 (Android 14)',
+    browser: 'Chrome',
+    version: '131.0.6312.80',
+    platform: 'Android',
+    deviceType: 'mobile',
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6312.80 Mobile Safari/537.36',
+    screenResolutions: ['1080x2340', '1080x2400', '1440x3200', '720x1600'],
+    viewportBase: '1080x2100',
+    marketShare: 8
+  },
+  {
+    id: 'chrome-android-13',
+    name: 'Chrome 130 (Android 13)',
+    browser: 'Chrome',
+    version: '130.0.6312.80',
+    platform: 'Android',
+    deviceType: 'mobile',
+    userAgent: 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6312.80 Mobile Safari/537.36',
+    screenResolutions: ['1080x2340', '1440x3200'],
+    viewportBase: '1080x2100',
+    marketShare: 5
+  },
+  {
+    id: 'chrome-android-tablet',
+    name: 'Chrome 131 (Android Tablet)',
+    browser: 'Chrome',
+    version: '131.0.6312.80',
+    platform: 'Android',
+    deviceType: 'tablet',
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-X900) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6312.80 Safari/537.36',
+    screenResolutions: ['1600x2560', '2000x1200', '2048x1536'],
+    viewportBase: '1600x2400',
+    marketShare: 2
+  },
+  
+  // ========== SAFARI - macOS & iOS (18% market share) ==========
+  {
+    id: 'safari-mac-17',
+    name: 'Safari 17.4 (macOS Sonoma)',
+    browser: 'Safari',
+    version: '17.4',
+    platform: 'MacOS',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+    screenResolutions: ['2560x1440', '1920x1080', '1680x1050'],
+    viewportBase: '2560x1305',
+    marketShare: 6
+  },
+  {
+    id: 'safari-iphone-17',
+    name: 'Safari 17.4 (iPhone 15)',
+    browser: 'Safari',
+    version: '17.4',
+    platform: 'iOS',
+    deviceType: 'mobile',
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+    screenResolutions: ['390x844', '393x852', '428x926', '430x932'],
+    viewportBase: '390x700',
+    marketShare: 8
+  },
+  {
+    id: 'safari-iphone-16',
+    name: 'Safari 17.0 (iPhone 14)',
+    browser: 'Safari',
+    version: '17.0',
+    platform: 'iOS',
+    deviceType: 'mobile',
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    screenResolutions: ['390x844', '428x926'],
+    viewportBase: '390x700',
+    marketShare: 4
+  },
+  {
+    id: 'safari-ipad-17',
+    name: 'Safari 17.4 (iPad Pro)',
+    browser: 'Safari',
+    version: '17.4',
+    platform: 'iOS',
+    deviceType: 'tablet',
+    userAgent: 'Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+    screenResolutions: ['2048x2732', '1668x2388', '1640x2360'],
+    viewportBase: '2048x2600',
+    marketShare: 2
+  },
+  
+  // ========== FIREFOX (3% market share) ==========
+  {
+    id: 'firefox-win-133',
+    name: 'Firefox 133 (Windows)',
+    browser: 'Firefox',
+    version: '133.0',
+    platform: 'Windows',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+    screenResolutions: ['1920x1080', '2560x1440', '1366x768'],
+    viewportBase: '1920x969',
+    marketShare: 1.5
+  },
+  {
+    id: 'firefox-mac-133',
+    name: 'Firefox 133 (macOS)',
+    browser: 'Firefox',
+    version: '133.0',
+    platform: 'MacOS',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.0; rv:133.0) Gecko/20100101 Firefox/133.0',
+    screenResolutions: ['2560x1440', '1920x1080'],
+    viewportBase: '2560x1305',
+    marketShare: 1
+  },
+  {
+    id: 'firefox-android-133',
+    name: 'Firefox 133 (Android)',
+    browser: 'Firefox',
+    version: '133.0',
+    platform: 'Android',
+    deviceType: 'mobile',
+    userAgent: 'Mozilla/5.0 (Android 14; Mobile; rv:133.0) Gecko/133.0 Firefox/133.0',
+    screenResolutions: ['1080x2340', '1080x2400'],
+    viewportBase: '1080x2100',
+    marketShare: 0.5
+  },
+  
+  // ========== EDGE (5% market share) ==========
+  {
+    id: 'edge-win-131',
+    name: 'Edge 131 (Windows 11)',
+    browser: 'Edge',
+    version: '131.0.0.0',
+    platform: 'Windows',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+    screenResolutions: ['1920x1080', '2560x1440', '1366x768'],
+    viewportBase: '1920x969',
+    marketShare: 4
+  },
+  {
+    id: 'edge-mac-131',
+    name: 'Edge 131 (macOS)',
+    browser: 'Edge',
+    version: '131.0.0.0',
+    platform: 'MacOS',
+    deviceType: 'desktop',
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+    screenResolutions: ['2560x1440', '1920x1080'],
+    viewportBase: '2560x1305',
+    marketShare: 1
+  },
+  
+  // ========== SAMSUNG INTERNET ==========
+  {
+    id: 'samsung-internet-25',
+    name: 'Samsung Internet 25 (Android)',
+    browser: 'Samsung',
+    version: '25.0',
+    platform: 'Android',
+    deviceType: 'mobile',
+    userAgent: 'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36',
+    screenResolutions: ['1080x2340', '1440x3200'],
+    viewportBase: '1080x2100',
+    marketShare: 2
+  }
+];
+
+// User Agent Configuration Manager
+const UserAgentConfigManager = {
+  // Get all available profiles
+  getAllProfiles: (): UserAgentProfile[] => UserAgentDatabase,
+  
+  // Get profiles by platform
+  getProfilesByPlatform: (platform: string): UserAgentProfile[] => 
+    UserAgentDatabase.filter(p => p.platform === platform),
+  
+  // Get profiles by device type
+  getProfilesByDeviceType: (deviceType: string): UserAgentProfile[] => 
+    UserAgentDatabase.filter(p => p.deviceType === deviceType),
+  
+  // Get profiles by browser
+  getProfilesByBrowser: (browser: string): UserAgentProfile[] => 
+    UserAgentDatabase.filter(p => p.browser === browser),
+  
+  // Get weighted random profile based on market share
+  getWeightedRandomProfile: (filters?: {
+    platforms?: string[];
+    deviceTypes?: string[];
+    browsers?: string[];
+    mobileRatio?: number;
+  }): UserAgentProfile => {
+    let pool = [...UserAgentDatabase];
+    
+    // Apply filters
+    if (filters?.platforms && filters.platforms.length > 0) {
+      pool = pool.filter(p => filters.platforms!.includes(p.platform));
+    }
+    if (filters?.deviceTypes && filters.deviceTypes.length > 0) {
+      pool = pool.filter(p => filters.deviceTypes!.includes(p.deviceType));
+    }
+    if (filters?.browsers && filters.browsers.length > 0) {
+      pool = pool.filter(p => filters.browsers!.includes(p.browser));
+    }
+    
+    // Apply mobile ratio
+    if (filters?.mobileRatio !== undefined) {
+      const mobilePool = pool.filter(p => p.deviceType === 'mobile');
+      const desktopPool = pool.filter(p => p.deviceType === 'desktop');
+      
+      if (Math.random() < filters.mobileRatio) {
+        pool = mobilePool.length > 0 ? mobilePool : pool;
+      } else {
+        pool = desktopPool.length > 0 ? desktopPool : pool;
+      }
+    }
+    
+    if (pool.length === 0) {
+      pool = UserAgentDatabase;
+    }
+    
+    // Weighted selection based on market share
+    const totalWeight = pool.reduce((sum, p) => sum + p.marketShare, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (const profile of pool) {
+      random -= profile.marketShare;
+      if (random <= 0) {
+        return profile;
+      }
+    }
+    
+    return pool[0];
+  },
+  
+  // Get specific profile by ID
+  getProfileById: (id: string): UserAgentProfile | undefined => 
+    UserAgentDatabase.find(p => p.id === id),
+  
+  // Generate random screen resolution from profile
+  getRandomResolution: (profile: UserAgentProfile): string => {
+    const resolutions = profile.screenResolutions;
+    // Add slight variation
+    const baseRes = resolutions[Math.floor(Math.random() * resolutions.length)];
+    const [w, h] = baseRes.split('x').map(Number);
+    const variation = Math.floor(Math.random() * 10) - 5;
+    return `${w + variation}x${h + variation}`;
+  },
+  
+  // Generate locale based on country
+  getLocaleForCountry: (countryCode: string): string => {
+    const localeMap: Record<string, string> = {
+      'US': 'en-US', 'GB': 'en-GB', 'AU': 'en-AU', 'CA': 'en-CA', 'NZ': 'en-NZ',
+      'FR': 'fr-FR', 'BE': 'fr-BE', 'CH': 'fr-CH', 'LU': 'fr-LU', 'MA': 'fr-MA',
+      'DE': 'de-DE', 'AT': 'de-AT', 'NL': 'nl-NL',
+      'ES': 'es-ES', 'MX': 'es-MX', 'AR': 'es-AR', 'CO': 'es-CO',
+      'IT': 'it-IT', 'PT': 'pt-PT', 'BR': 'pt-BR',
+      'JP': 'ja-JP', 'CN': 'zh-CN', 'TW': 'zh-TW', 'HK': 'zh-HK',
+      'KR': 'ko-KR', 'RU': 'ru-RU', 'SA': 'ar-SA', 'AE': 'ar-AE',
+      'TR': 'tr-TR', 'PL': 'pl-PL', 'IN': 'en-IN', 'TH': 'th-TH',
+      'ID': 'id-ID', 'VN': 'vi-VN', 'MY': 'ms-MY', 'PH': 'en-PH'
+    };
+    return localeMap[countryCode] || 'en-US';
+  },
+  
+  // Generate timezone based on country
+  getTimezoneForCountry: (countryCode: string): string => {
+    const tzMap: Record<string, string> = {
+      'US': 'America/New_York', 'GB': 'Europe/London', 'AU': 'Australia/Sydney',
+      'CA': 'America/Toronto', 'NZ': 'Pacific/Auckland', 'FR': 'Europe/Paris',
+      'DE': 'Europe/Berlin', 'IT': 'Europe/Rome', 'ES': 'Europe/Madrid',
+      'NL': 'Europe/Amsterdam', 'BE': 'Europe/Brussels', 'CH': 'Europe/Zurich',
+      'JP': 'Asia/Tokyo', 'CN': 'Asia/Shanghai', 'KR': 'Asia/Seoul',
+      'SG': 'Asia/Singapore', 'HK': 'Asia/Hong_Kong', 'TW': 'Asia/Taipei',
+      'IN': 'Asia/Kolkata', 'AE': 'Asia/Dubai', 'SA': 'Asia/Riyadh',
+      'RU': 'Europe/Moscow', 'BR': 'America/Sao_Paulo', 'MX': 'America/Mexico_City',
+      'ZA': 'Africa/Johannesburg', 'NG': 'Africa/Lagos', 'EG': 'Africa/Cairo',
+      'MA': 'Africa/Casablanca', 'TR': 'Europe/Istanbul', 'PL': 'Europe/Warsaw',
+      'TH': 'Asia/Bangkok', 'ID': 'Asia/Jakarta', 'VN': 'Asia/Ho_Chi_Minh',
+      'MY': 'Asia/Kuala_Lumpur', 'PH': 'Asia/Manila'
+    };
+    return tzMap[countryCode] || 'UTC';
+  }
+};
+
+// Enhanced Fingerprint Generator using UserAgentConfig
+const UserAgentFingerprintGenerator = {
+  // Generate complete fingerprint from campaign config
+  generateFingerprint: (config: {
+    userAgentMode: 'auto' | 'custom' | 'specific';
+    customUserAgent?: string;
+    specificProfileId?: string;
+    browserPreference?: string[];
+    platformPreference?: string[];
+    deviceTypePreference?: string[];
+    mobileRatio?: number;
+    countryCode: string;
+  }) => {
+    let profile: UserAgentProfile;
+    
+    if (config.userAgentMode === 'custom' && config.customUserAgent) {
+      // Custom UA - create synthetic profile
+      profile = {
+        id: 'custom',
+        name: 'Custom User Agent',
+        browser: 'Chrome',
+        version: 'custom',
+        platform: 'Windows',
+        deviceType: 'desktop',
+        userAgent: config.customUserAgent,
+        screenResolutions: ['1920x1080'],
+        viewportBase: '1920x969',
+        marketShare: 100
+      };
+    } else if (config.userAgentMode === 'specific' && config.specificProfileId) {
+      // Specific profile selected
+      profile = UserAgentConfigManager.getProfileById(config.specificProfileId) || 
+                UserAgentConfigManager.getWeightedRandomProfile();
+    } else {
+      // Auto mode with preferences
+      profile = UserAgentConfigManager.getWeightedRandomProfile({
+        platforms: config.platformPreference,
+        deviceTypes: config.deviceTypePreference,
+        browsers: config.browserPreference,
+        mobileRatio: config.mobileRatio
+      });
+    }
+    
+    const locale = UserAgentConfigManager.getLocaleForCountry(config.countryCode);
+    const timezone = UserAgentConfigManager.getTimezoneForCountry(config.countryCode);
+    const resolution = UserAgentConfigManager.getRandomResolution(profile);
+    
+    return {
+      // Browser fingerprint
+      userAgent: profile.userAgent,
+      browser: profile.browser,
+      browserVersion: profile.version,
+      platform: profile.platform,
+      deviceType: profile.deviceType,
+      
+      // Screen & viewport
+      screenResolution: resolution,
+      viewport: profile.viewportBase,
+      colorDepth: Math.random() > 0.7 ? 30 : 24,
+      
+      // Locale & timezone
+      language: locale,
+      timezone: timezone,
+      
+      // Hardware simulation
+      hardwareConcurrency: [4, 6, 8, 12, 16][Math.floor(Math.random() * 5)],
+      deviceMemory: [4, 8, 16, 32][Math.floor(Math.random() * 4)],
+      
+      // WebGL
+      webglRenderer: EnhancedFingerprintRotator.webGLRenderers[profile.platform]?.[
+        Math.floor(Math.random() * EnhancedFingerprintRotator.webGLRenderers[profile.platform]?.length || 0)
+      ] || 'Generic GPU',
+      
+      // Canvas noise
+      canvasNoise: EnhancedFingerprintRotator.getCanvasNoise(),
+      
+      // Audio context
+      audioContext: EnhancedFingerprintRotator.getAudioContext(),
+      
+      // Mobile flag
+      isMobile: profile.deviceType === 'mobile',
+      
+      // Profile reference
+      profileId: profile.id,
+      profileName: profile.name
+    };
   }
 };
 
@@ -9481,6 +9923,53 @@ interface Campaign {
   businessHoursOnly?: boolean;
   returningVisitors?: boolean;
   targetOS?: string;
+  
+  // ========== User Agent & Browser Fingerprint Config (v31.0) ==========
+  // User Agent Mode: 'auto' = weighted random based on market share, 'specific' = use specificProfileId, 'custom' = use customUserAgent
+  userAgentMode?: 'auto' | 'specific' | 'custom';
+  
+  // For specific mode - select a predefined profile ID from UserAgentDatabase
+  userAgentProfileId?: string;
+  
+  // For custom mode - provide a custom user agent string
+  customUserAgent?: string;
+  
+  // Browser preferences for auto mode (empty = all browsers)
+  browserPreference?: ('Chrome' | 'Firefox' | 'Safari' | 'Edge' | 'Samsung')[];
+  
+  // Platform preferences for auto mode (empty = all platforms)
+  platformPreference?: ('Windows' | 'MacOS' | 'iOS' | 'Android')[];
+  
+  // Device type preferences for auto mode (empty = all device types)
+  deviceTypePreference?: ('desktop' | 'mobile' | 'tablet')[];
+  
+  // Mobile traffic ratio (0.0 = 0% mobile, 0.5 = 50% mobile, 1.0 = 100% mobile)
+  mobileRatio?: number;
+  
+  // Screen resolution preference (empty = auto-select based on profile)
+  screenResolutionPreference?: string;
+  
+  // Locale/Language preference (empty = auto-match to geo)
+  languagePreference?: string;
+  
+  // Timezone preference (empty = auto-match to geo)
+  timezonePreference?: string;
+  
+  // Hardware concurrency preference (empty = random)
+  hardwareConcurrency?: number;
+  
+  // Device memory preference in GB (empty = random)
+  deviceMemory?: number;
+  
+  // Enable WebGL fingerprint rotation
+  enableWebGLRotation?: boolean;
+  
+  // Enable Canvas fingerprint noise
+  enableCanvasNoise?: boolean;
+  
+  // Enable Audio context variation
+  enableAudioVariation?: boolean;
+  
   stats: {
     hits: number;
   };
@@ -10746,6 +11235,48 @@ const MainContent = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+  
+  // User Agent Mode visibility handler for campaign modal (v31.0)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleUAModeChange = () => {
+      const uaModeSelect = document.querySelector('select[name="userAgentMode"]') as HTMLSelectElement;
+      const specificSection = document.getElementById('uaSpecificProfileSection');
+      const customSection = document.getElementById('uaCustomSection');
+      
+      if (uaModeSelect && specificSection && customSection) {
+        const mode = uaModeSelect.value;
+        
+        // Show specific section only when mode is 'specific'
+        if (mode === 'specific') {
+          specificSection.style.display = 'block';
+          customSection.style.display = 'none';
+        } else if (mode === 'custom') {
+          specificSection.style.display = 'none';
+          customSection.style.display = 'block';
+        } else {
+          // Auto mode - hide both
+          specificSection.style.display = 'block'; // Keep visible for reference
+          customSection.style.display = 'none';
+        }
+      }
+    };
+    
+    // Set up event listener
+    const uaModeSelect = document.querySelector('select[name="userAgentMode"]') as HTMLSelectElement;
+    if (uaModeSelect) {
+      uaModeSelect.addEventListener('change', handleUAModeChange);
+      // Initial call
+      handleUAModeChange();
+    }
+    
+    return () => {
+      if (uaModeSelect) {
+        uaModeSelect.removeEventListener('change', handleUAModeChange);
+      }
+    };
+  }, [showNewCampaignModal, editingCampaign]); // Re-run when modal opens
   
   // Scraper Modal State
   const [scrapeUrl, setScrapeUrl] = useState('');
@@ -12023,28 +12554,65 @@ const MainContent = () => {
        const cookies = SessionManager.generateGACookies(hitCid);
        
        // ============================================================
-       // ENHANCED: FINGERPRINT WITH NOISE
+       // ENHANCED: FINGERPRINT WITH NOISE (v31.0 - User Agent Config)
        // ============================================================
        
-       const enhancedFingerprint = EnhancedFingerprintRotator.getEnhancedProfile(job.targetOS || 'Random', countryCode);
+       // Check if campaign has User Agent configuration (v31.0)
+       let enhancedFingerprint: any;
        
-       // Determine mobile bias based on geo and weekend
-       let mobileBias = geoPattern.mobileRatio;
-       if (weekendFactor.isWeekend) {
-           mobileBias = weekendFactor.mobileBias;
-       }
-       
-       // Override fingerprint if mobile bias requires it
-       if (Math.random() < mobileBias && !enhancedFingerprint.mobile) {
-           // Force mobile profile
-           const mobileProfile = EnhancedFingerprintRotator.getEnhancedProfile('iOS', countryCode);
-           Object.assign(enhancedFingerprint, mobileProfile);
+       if (job.userAgentMode) {
+         // Use new User Agent Config system (v31.0)
+         enhancedFingerprint = UserAgentFingerprintGenerator.generateFingerprint({
+           userAgentMode: job.userAgentMode,
+           customUserAgent: job.customUserAgent,
+           specificProfileId: job.userAgentProfileId,
+           browserPreference: job.browserPreference,
+           platformPreference: job.platformPreference,
+           deviceTypePreference: job.deviceTypePreference,
+           mobileRatio: job.mobileRatio ?? 0.5,
+           countryCode: countryCode
+         });
+         
+         // Apply hardware settings if specified
+         if (job.hardwareConcurrency) {
+           enhancedFingerprint.hardwareConcurrency = job.hardwareConcurrency;
+         }
+         if (job.deviceMemory) {
+           enhancedFingerprint.deviceMemory = job.deviceMemory;
+         }
+         
+         // Apply anti-detection features
+         if (!job.enableWebGLRotation) {
+           enhancedFingerprint.webglRenderer = 'Generic GPU';
+         }
+         if (!job.enableCanvasNoise) {
+           enhancedFingerprint.canvasNoise = '';
+         }
+         if (!job.enableAudioVariation) {
+           enhancedFingerprint.audioContext = { sampleRate: 44100, latency: 0.01 };
+         }
+       } else {
+         // Legacy fingerprint generation (backward compatible)
+         enhancedFingerprint = EnhancedFingerprintRotator.getEnhancedProfile(job.targetOS || 'Random', countryCode);
+         
+         // Determine mobile bias based on geo and weekend
+         let mobileBias = geoPattern.mobileRatio;
+         if (weekendFactor.isWeekend) {
+             mobileBias = weekendFactor.mobileBias;
+         }
+         
+         // Override fingerprint if mobile bias requires it
+         if (Math.random() < mobileBias && !enhancedFingerprint.mobile) {
+             // Force mobile profile
+             const mobileProfile = EnhancedFingerprintRotator.getEnhancedProfile('iOS', countryCode);
+             Object.assign(enhancedFingerprint, mobileProfile);
+         }
        }
        
        const techParams = { 
-           vp: enhancedFingerprint.vp, 
-           sd: enhancedFingerprint.sd, 
-           ul: enhancedFingerprint.ul 
+           vp: enhancedFingerprint.vp || enhancedFingerprint.viewport, 
+           sd: enhancedFingerprint.sd || `${enhancedFingerprint.colorDepth}-bit`, 
+           ul: enhancedFingerprint.ul || enhancedFingerprint.language
        };
        
        // ============================================================
@@ -13174,6 +13742,31 @@ Report generated for: ${domain}
       returningVisitors: formData.get('returningVisitors') === 'on',
       targetOS: formData.get('targetOS') as string,
       stats: editingCampaign?.stats || { hits: 0 },
+      
+      // ========== User Agent & Browser Fingerprint Config (v31.0) ==========
+      userAgentMode: (formData.get('userAgentMode') as 'auto' | 'specific' | 'custom') || 'auto',
+      userAgentProfileId: formData.get('userAgentProfileId') as string || undefined,
+      customUserAgent: formData.get('customUserAgent') as string || undefined,
+      browserPreference: formData.get('browserPreference') && formData.get('browserPreference') !== 'all' 
+        ? [formData.get('browserPreference') as 'Chrome' | 'Firefox' | 'Safari' | 'Edge' | 'Samsung'] 
+        : undefined,
+      platformPreference: formData.get('platformPreference') && formData.get('platformPreference') !== 'all' 
+        ? [formData.get('platformPreference') as 'Windows' | 'MacOS' | 'iOS' | 'Android'] 
+        : undefined,
+      deviceTypePreference: formData.get('deviceTypePreference') && formData.get('deviceTypePreference') !== 'all' 
+        ? [formData.get('deviceTypePreference') as 'desktop' | 'mobile' | 'tablet'] 
+        : undefined,
+      mobileRatio: parseInt(formData.get('mobileRatio') as string) / 100 || 0.5,
+      hardwareConcurrency: formData.get('hardwareConcurrency') && formData.get('hardwareConcurrency') !== 'random' 
+        ? parseInt(formData.get('hardwareConcurrency') as string) 
+        : undefined,
+      deviceMemory: formData.get('deviceMemory') && formData.get('deviceMemory') !== 'random' 
+        ? parseInt(formData.get('deviceMemory') as string) 
+        : undefined,
+      enableWebGLRotation: formData.get('enableWebGLRotation') === 'on',
+      enableCanvasNoise: formData.get('enableCanvasNoise') === 'on',
+      enableAudioVariation: formData.get('enableAudioVariation') === 'on',
+      
       // START Scheduling fields
       scheduledEnabled,
       scheduledDate: scheduledEnabled ? scheduledDate : undefined,
@@ -23491,11 +24084,211 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer"><input type="checkbox" name="returningVisitors" defaultChecked={editingCampaign?.returningVisitors !== false} className="w-4 h-4" /> Returning Visitors (30%)</label>
                   </div>
                   
+                  {/* User Agent & Browser Fingerprint Configuration Section */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold text-emerald-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
+                       <Fingerprint size={14} />
+                       4. User Agent & Browser Fingerprint (v31.0)
+                     </h4>
+                     
+                     {/* User Agent Mode Selection */}
+                     <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl space-y-4">
+                       <div className="space-y-2">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">User Agent Mode</label>
+                         <select 
+                           name="userAgentMode" 
+                           defaultValue={editingCampaign?.userAgentMode || "auto"} 
+                           className="w-full p-3 bg-white rounded-xl border outline-none text-sm"
+                         >
+                           <option value="auto">🤖 Auto (Weighted by Market Share)</option>
+                           <option value="specific">🎯 Specific Profile (Select Below)</option>
+                           <option value="custom">✏️ Custom User Agent</option>
+                         </select>
+                       </div>
+                       
+                       {/* Specific Profile Selection - Shows when mode is 'specific' */}
+                       <div className="space-y-2" id="uaSpecificProfileSection">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Select Browser Profile</label>
+                         <select 
+                           name="userAgentProfileId" 
+                           defaultValue={editingCampaign?.userAgentProfileId || ""} 
+                           className="w-full p-3 bg-white rounded-xl border outline-none text-sm"
+                         >
+                           <option value="">-- Select a Profile --</option>
+                           <optgroup label="🖥️ Desktop - Chrome">
+                             <option value="chrome-win-131">Chrome 131 (Windows 11) - 28% Market</option>
+                             <option value="chrome-win-130">Chrome 130 (Windows 10) - 15% Market</option>
+                             <option value="chrome-mac-131">Chrome 131 (macOS Sonoma) - 10% Market</option>
+                             <option value="chrome-mac-m1">Chrome 131 (Mac M1/M2) - 5% Market</option>
+                           </optgroup>
+                           <optgroup label="📱 Mobile - Chrome">
+                             <option value="chrome-android-14">Chrome 131 (Android 14) - 8% Market</option>
+                             <option value="chrome-android-13">Chrome 130 (Android 13) - 5% Market</option>
+                             <option value="chrome-android-tablet">Chrome 131 (Android Tablet) - 2% Market</option>
+                           </optgroup>
+                           <optgroup label="🍎 Safari (Apple)">
+                             <option value="safari-mac-17">Safari 17.4 (macOS Sonoma) - 6% Market</option>
+                             <option value="safari-iphone-17">Safari 17.4 (iPhone 15) - 8% Market</option>
+                             <option value="safari-iphone-16">Safari 17.0 (iPhone 14) - 4% Market</option>
+                             <option value="safari-ipad-17">Safari 17.4 (iPad Pro) - 2% Market</option>
+                           </optgroup>
+                           <optgroup label="🦊 Firefox">
+                             <option value="firefox-win-133">Firefox 133 (Windows) - 1.5% Market</option>
+                             <option value="firefox-mac-133">Firefox 133 (macOS) - 1% Market</option>
+                             <option value="firefox-android-133">Firefox 133 (Android) - 0.5% Market</option>
+                           </optgroup>
+                           <optgroup label="🔷 Edge">
+                             <option value="edge-win-131">Edge 131 (Windows 11) - 4% Market</option>
+                             <option value="edge-mac-131">Edge 131 (macOS) - 1% Market</option>
+                           </optgroup>
+                           <optgroup label="📱 Samsung">
+                             <option value="samsung-internet-25">Samsung Internet 25 (Android) - 2% Market</option>
+                           </optgroup>
+                         </select>
+                       </div>
+                       
+                       {/* Custom User Agent Input - Shows when mode is 'custom' */}
+                       <div className="space-y-2 hidden" id="uaCustomSection">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Custom User Agent String</label>
+                         <input 
+                           type="text" 
+                           name="customUserAgent" 
+                           defaultValue={editingCampaign?.customUserAgent || ""} 
+                           placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36..."
+                           className="w-full p-3 bg-white rounded-xl border outline-none text-sm font-mono"
+                         />
+                         <p className="text-[9px] text-amber-600">⚠️ Custom UAs may trigger bot detection. Use with caution.</p>
+                       </div>
+                     </div>
+                     
+                     {/* Browser & Platform Preferences (Auto Mode) */}
+                     <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl">
+                       <div className="space-y-2">
+                         <label className="text-[10px] font-bold text-slate-500 uppercase">Browser</label>
+                         <select 
+                           name="browserPreference" 
+                           defaultValue={editingCampaign?.browserPreference?.[0] || "all"} 
+                           className="w-full p-2 bg-white rounded-lg border outline-none text-xs"
+                         >
+                           <option value="all">All Browsers</option>
+                           <option value="Chrome">Chrome Only</option>
+                           <option value="Safari">Safari Only</option>
+                           <option value="Firefox">Firefox Only</option>
+                           <option value="Edge">Edge Only</option>
+                           <option value="Samsung">Samsung Only</option>
+                         </select>
+                       </div>
+                       <div className="space-y-2">
+                         <label className="text-[10px] font-bold text-slate-500 uppercase">Platform</label>
+                         <select 
+                           name="platformPreference" 
+                           defaultValue={editingCampaign?.platformPreference?.[0] || "all"} 
+                           className="w-full p-2 bg-white rounded-lg border outline-none text-xs"
+                         >
+                           <option value="all">All Platforms</option>
+                           <option value="Windows">Windows Only</option>
+                           <option value="MacOS">macOS Only</option>
+                           <option value="iOS">iOS Only</option>
+                           <option value="Android">Android Only</option>
+                         </select>
+                       </div>
+                       <div className="space-y-2">
+                         <label className="text-[10px] font-bold text-slate-500 uppercase">Device Type</label>
+                         <select 
+                           name="deviceTypePreference" 
+                           defaultValue={editingCampaign?.deviceTypePreference?.[0] || "all"} 
+                           className="w-full p-2 bg-white rounded-lg border outline-none text-xs"
+                         >
+                           <option value="all">All Devices</option>
+                           <option value="desktop">Desktop Only</option>
+                           <option value="mobile">Mobile Only</option>
+                           <option value="tablet">Tablet Only</option>
+                         </select>
+                       </div>
+                     </div>
+                     
+                     {/* Mobile Ratio Slider */}
+                     <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+                       <div className="flex justify-between items-center">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Mobile Traffic Ratio</label>
+                         <span className="text-xs font-bold text-blue-600" id="mobileRatioValue">
+                           {Math.round((editingCampaign?.mobileRatio ?? 0.5) * 100)}%
+                         </span>
+                       </div>
+                       <input 
+                         type="range" 
+                         name="mobileRatio" 
+                         min="0" 
+                         max="100" 
+                         defaultValue={Math.round((editingCampaign?.mobileRatio ?? 0.5) * 100)}
+                         className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                         onInput={(e) => {
+                           const value = (e.target as HTMLInputElement).value;
+                           document.getElementById('mobileRatioValue')!.textContent = value + '%';
+                         }}
+                       />
+                       <div className="flex justify-between text-[9px] text-slate-400">
+                         <span>0% Desktop Only</span>
+                         <span>50% Balanced</span>
+                         <span>100% Mobile Only</span>
+                       </div>
+                     </div>
+                     
+                     {/* Anti-Detection Features */}
+                     <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-xl">
+                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                         <input type="checkbox" name="enableWebGLRotation" defaultChecked={editingCampaign?.enableWebGLRotation !== false} className="w-4 h-4" /> 
+                         WebGL Rotation
+                       </label>
+                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                         <input type="checkbox" name="enableCanvasNoise" defaultChecked={editingCampaign?.enableCanvasNoise !== false} className="w-4 h-4" /> 
+                         Canvas Noise
+                       </label>
+                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                         <input type="checkbox" name="enableAudioVariation" defaultChecked={editingCampaign?.enableAudioVariation !== false} className="w-4 h-4" /> 
+                         Audio Variation
+                       </label>
+                     </div>
+                     
+                     {/* Hardware Simulation */}
+                     <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl">
+                       <div className="space-y-2">
+                         <label className="text-[10px] font-bold text-slate-500 uppercase">CPU Cores (Random if empty)</label>
+                         <select 
+                           name="hardwareConcurrency" 
+                           defaultValue={editingCampaign?.hardwareConcurrency?.toString() || "random"} 
+                           className="w-full p-2 bg-white rounded-lg border outline-none text-xs"
+                         >
+                           <option value="random">🎲 Random (4, 6, 8, 12, 16)</option>
+                           <option value="4">4 Cores</option>
+                           <option value="6">6 Cores</option>
+                           <option value="8">8 Cores</option>
+                           <option value="12">12 Cores</option>
+                           <option value="16">16 Cores</option>
+                         </select>
+                       </div>
+                       <div className="space-y-2">
+                         <label className="text-[10px] font-bold text-slate-500 uppercase">Device Memory (Random if empty)</label>
+                         <select 
+                           name="deviceMemory" 
+                           defaultValue={editingCampaign?.deviceMemory?.toString() || "random"} 
+                           className="w-full p-2 bg-white rounded-lg border outline-none text-xs"
+                         >
+                           <option value="random">🎲 Random (4, 8, 16, 32 GB)</option>
+                           <option value="4">4 GB</option>
+                           <option value="8">8 GB</option>
+                           <option value="16">16 GB</option>
+                           <option value="32">32 GB</option>
+                         </select>
+                       </div>
+                     </div>
+                  </div>
+                  
                   {/* Schedule Campaign Section */}
                   <div className="space-y-4">
                      <h4 className="text-xs font-bold text-purple-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
                        <Calendar size={14} />
-                       4. Campaign Schedule (Optional)
+                       5. Campaign Schedule (Optional)
                      </h4>
                      
                      {/* START Schedule */}
