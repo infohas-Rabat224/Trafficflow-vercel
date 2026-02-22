@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v29-0-enterprise';
+  : 'traffic-flow-v30-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -7090,7 +7090,7 @@ const PredictiveRankingsEngine = {
 };
 
 // ============================================================
-// ADVANCED SEO SIGNAL MODULES (v29.0 Enterprise)
+// ADVANCED SEO SIGNAL MODULES (v30.0 Enterprise)
 // ============================================================
 
 // --- MODULE 1: BRAND SEARCH AMPLIFICATION WITH AUTHORITY SCORING ---
@@ -8246,7 +8246,7 @@ const ContentQualityScorer = {
 };
 
 // ============================================================
-// NEXT-GEN SEO SIGNAL MODULES (v29.0 Enterprise - NEW)
+// NEXT-GEN SEO SIGNAL MODULES (v30.0 Enterprise - NEW)
 // ============================================================
 
 // --- MODULE 11: VOICE SEARCH SIMULATOR ---
@@ -9457,7 +9457,7 @@ const UsersTab = ({ users, onAddUser, onEditUser, onDeleteUser, onResetPassword 
 interface Campaign {
   id: string;
   name: string;
-  status: 'active' | 'paused';
+  status: 'active' | 'paused' | 'scheduled';
   trafficType: string;
   urls: string[];
   targeting: {
@@ -9484,6 +9484,12 @@ interface Campaign {
   stats: {
     hits: number;
   };
+  // Scheduled Campaign Fields
+  scheduledDate?: string; // ISO date string (YYYY-MM-DD)
+  scheduledTime?: string; // Time string (HH:MM)
+  scheduledEnabled?: boolean; // Whether scheduling is enabled
+  lastRunAt?: string; // Last time campaign was triggered
+  nextRunAt?: string; // Next scheduled run time
 }
 
 // --- Log Interface ---
@@ -11534,6 +11540,75 @@ const MainContent = () => {
     fetchContentData();
   }, [selectedDomain, allDomains]);
 
+  // ============================================================
+  // SCHEDULED CAMPAIGN CHECKER (v30.0 Enterprise)
+  // ============================================================
+  
+  // Check for scheduled campaigns that need to start
+  useEffect(() => {
+    const checkScheduledCampaigns = () => {
+      const now = new Date();
+      const nowISO = now.toISOString();
+      
+      // Find campaigns that are scheduled and their time has come
+      const campaignsToActivate = campaigns.filter(c => {
+        if (c.status !== 'scheduled' || !c.nextRunAt) return false;
+        const scheduledTime = new Date(c.nextRunAt);
+        return scheduledTime <= now;
+      });
+      
+      if (campaignsToActivate.length > 0) {
+        // Start the engine if not running
+        if (!isEngineRunning) {
+          setIsEngineRunning(true);
+          addToast?.('Engine started for scheduled campaigns', 'success');
+        }
+        
+        // Update campaign statuses to active
+        setCampaigns(prev => prev.map(c => {
+          if (campaignsToActivate.some(scheduled => scheduled.id === c.id)) {
+            return {
+              ...c,
+              status: 'active' as const,
+              lastRunAt: nowISO,
+              nextRunAt: undefined
+            };
+          }
+          return c;
+        }));
+        
+        // Show toast for each activated campaign
+        campaignsToActivate.forEach(c => {
+          addToast?.(`Scheduled campaign "${c.name}" started!`, 'success');
+        });
+      }
+    };
+    
+    // Check immediately
+    checkScheduledCampaigns();
+    
+    // Check every 30 seconds
+    const interval = setInterval(checkScheduledCampaigns, 30000);
+    
+    return () => clearInterval(interval);
+  }, [campaigns, isEngineRunning, addToast]);
+  
+  // Function to manually trigger scheduled campaigns via API (for cron jobs)
+  const triggerScheduledCampaigns = async () => {
+    try {
+      const response = await fetch('/api/cron/scheduled-campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+      if (result.success && result.activatedCount > 0) {
+        addToast?.(`${result.activatedCount} scheduled campaign(s) activated`, 'success');
+      }
+    } catch (error) {
+      console.error('Failed to trigger scheduled campaigns:', error);
+    }
+  };
+
   // Calculate Keywords & Rank Tracking from campaign data
   useEffect(() => {
     // If no domain selected, reset data
@@ -12928,10 +13003,25 @@ Report generated for: ${domain}
         const countryObj = CONTINENT_DATA[selContinent].find(c => c.name === selCountryName);
         if (countryObj) resolvedCode = countryObj.code;
     }
+    
+    // Handle scheduling data
+    const scheduledEnabled = formData.get('scheduledEnabled') === 'on';
+    const scheduledDate = formData.get('scheduledDate') as string;
+    const scheduledTime = formData.get('scheduledTime') as string;
+    
+    // Calculate next run time if scheduling is enabled
+    let nextRunAt: string | undefined = undefined;
+    let campaignStatus: 'active' | 'paused' | 'scheduled' = editingCampaign ? editingCampaign.status : 'paused';
+    
+    if (scheduledEnabled && scheduledDate && scheduledTime) {
+      nextRunAt = `${scheduledDate}T${scheduledTime}:00`;
+      campaignStatus = 'scheduled';
+    }
+    
     const newCamp: Campaign = {
       id: editingCampaign ? editingCampaign.id : `camp-${Date.now()}`,
       name: formData.get('name') as string,
-      status: editingCampaign ? editingCampaign.status : 'paused',
+      status: campaignStatus,
       trafficType: formData.get('trafficType') as string,
       urls: (formData.get('urls') as string).split('\n').filter(u => u),
       targeting: { continent: selContinent, countryCode: resolvedCode, city: formData.get('city') as string },
@@ -12951,11 +13041,21 @@ Report generated for: ${domain}
       businessHoursOnly: formData.get('businessHoursOnly') === 'on',
       returningVisitors: formData.get('returningVisitors') === 'on',
       targetOS: formData.get('targetOS') as string,
-      stats: editingCampaign?.stats || { hits: 0 }
+      stats: editingCampaign?.stats || { hits: 0 },
+      // Scheduling fields
+      scheduledEnabled,
+      scheduledDate: scheduledEnabled ? scheduledDate : undefined,
+      scheduledTime: scheduledEnabled ? scheduledTime : undefined,
+      nextRunAt,
+      lastRunAt: editingCampaign?.lastRunAt
     };
     if (editingCampaign) { setCampaigns(prev => prev.map(c => c.id === newCamp.id ? newCamp : c)); } 
     else { setCampaigns(prev => [...prev, newCamp]); }
-    addToast?.(editingCampaign ? "Campaign Updated" : "New Campaign Created", "success");
+    
+    const scheduleMsg = scheduledEnabled 
+      ? ` Campaign scheduled for ${scheduledDate} at ${scheduledTime}` 
+      : '';
+    addToast?.(editingCampaign ? `Campaign Updated${scheduleMsg}` : `New Campaign Created${scheduleMsg}`, "success");
     setShowNewCampaignModal(false); 
     setEditingCampaign(null);
   };
@@ -13221,7 +13321,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v29.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v30.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -13273,7 +13373,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v29.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v30.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -13914,8 +14014,31 @@ End of Report
                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                          />
                        </td>
-                       <td className="px-6 py-4 font-bold">{safeString(c.name)}</td>
-                       <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{safeString(c.status)}</span></td>
+                       <td className="px-6 py-4 font-bold">
+                         <div className="flex items-center gap-2">
+                           {safeString(c.name)}
+                           {c.scheduledEnabled && c.status === 'scheduled' && (
+                             <span className="text-[10px] text-purple-600 flex items-center gap-1">
+                               <Calendar size={10} />
+                               {c.scheduledDate} {c.scheduledTime}
+                             </span>
+                           )}
+                         </div>
+                       </td>
+                       <td className="px-6 py-4">
+                         <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${
+                           c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 
+                           c.status === 'scheduled' ? 'bg-purple-100 text-purple-700' : 
+                           'bg-slate-100 text-slate-600'
+                         }`}>
+                           {safeString(c.status)}
+                         </span>
+                         {c.status === 'scheduled' && c.nextRunAt && (
+                           <div className="text-[10px] text-slate-500 mt-1">
+                             {new Date(c.nextRunAt).toLocaleString()}
+                           </div>
+                         )}
+                       </td>
                        <td className="px-6 py-4">{safeString(c.targeting?.countryCode)}</td>
                        <td className="px-6 py-4 text-right flex justify-end gap-2">
                           <button onClick={() => toggleCampaignStatus(c)} className={`p-2 border rounded hover:bg-slate-100 ${c.status === 'active' ? 'text-emerald-600' : ''}`} title={c.status === 'active' ? 'Pause' : 'Start'}>{c.status === 'active' ? <Pause size={14} /> : <Play size={14} />}</button>
@@ -14968,7 +15091,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v29.0
+                        TrafficFlow Enterprise v30.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -15149,7 +15272,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v29.0
+Report generated by TrafficFlow Enterprise v30.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -16135,7 +16258,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v29.0
+                        TrafficFlow Enterprise v30.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
@@ -23091,6 +23214,45 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer"><input type="checkbox" name="useProxies" defaultChecked={editingCampaign?.useProxies !== false} className="w-4 h-4" /> Use Proxy Infra</label>
                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer"><input type="checkbox" name="businessHoursOnly" defaultChecked={editingCampaign?.businessHoursOnly} className="w-4 h-4" /> Business Hours Only</label>
                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer"><input type="checkbox" name="returningVisitors" defaultChecked={editingCampaign?.returningVisitors !== false} className="w-4 h-4" /> Returning Visitors (30%)</label>
+                  </div>
+                  
+                  {/* Schedule Campaign Section */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold text-purple-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
+                       <Calendar size={14} />
+                       4. Campaign Schedule (Optional)
+                     </h4>
+                     <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl">
+                       <label className="flex items-center gap-2 text-xs font-bold text-purple-700 cursor-pointer mb-4">
+                         <input type="checkbox" name="scheduledEnabled" defaultChecked={editingCampaign?.scheduledEnabled} className="w-4 h-4" />
+                         Enable Scheduled Run
+                       </label>
+                       <div className="grid grid-cols-2 gap-4">
+                         <div className="space-y-2">
+                           <label className="text-[11px] font-bold text-slate-500 uppercase">Start Date</label>
+                           <input 
+                             type="date" 
+                             name="scheduledDate" 
+                             defaultValue={editingCampaign?.scheduledDate || new Date().toISOString().split('T')[0]}
+                             min={new Date().toISOString().split('T')[0]}
+                             className="w-full p-3 bg-white rounded-xl border outline-none"
+                           />
+                         </div>
+                         <div className="space-y-2">
+                           <label className="text-[11px] font-bold text-slate-500 uppercase">Start Time</label>
+                           <input 
+                             type="time" 
+                             name="scheduledTime" 
+                             defaultValue={editingCampaign?.scheduledTime || '09:00'}
+                             className="w-full p-3 bg-white rounded-xl border outline-none"
+                           />
+                         </div>
+                       </div>
+                       <p className="text-[10px] text-purple-600 mt-3 flex items-center gap-1">
+                         <Clock size={12} />
+                         Campaign will automatically start at the scheduled time
+                       </p>
+                     </div>
                   </div>
                   <div className="pt-4 flex gap-3">
                      <button type="button" onClick={() => { setShowNewCampaignModal(false); setEditingCampaign(null); }} className="flex-1 py-3 border rounded-xl font-bold text-slate-500">Cancel</button>

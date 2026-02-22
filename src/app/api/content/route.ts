@@ -312,7 +312,7 @@ function generateFallbackGaps(domain: string, keyword: string): { topic: string;
 export async function GET() {
   return NextResponse.json({ 
     message: "TrafficFlow Content Center API",
-    version: "29.0.0",
+    version: "30.0.0",
     status: "active",
     actions: ['get_suggestions', 'get_performance', 'analyze_gaps', 'get_metrics']
   });

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TrafficFlow v29.0 Enterprise - Traffic Management SaaS",
+  title: "TrafficFlow v30.0 Enterprise - Traffic Management SaaS",
   description: "Enterprise-grade traffic management and analytics platform with Content Center improvements. Domain-specific AI suggestions, content gap analysis, and performance metrics. Enhanced data accuracy and real-time analytics.",
   keywords: ["TrafficFlow", "Traffic Management", "Analytics", "GA4", "Campaigns", "SaaS", "SEO", "Marketing", "IP Rotation", "ISP Simulation", "CTR Optimization", "SERP Engagement", "Safety Score", "Anomaly Detection", "Algorithm Response", "Audit Trail", "Compliance", "Integrations", "Google Ads", "Facebook Ads", "Bing Webmaster"],
   authors: [{ name: "TrafficFlow Team" }],
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "TrafficFlow v29.0 Enterprise",
+    title: "TrafficFlow v30.0 Enterprise",
     description: "Enterprise-grade traffic management with full integrations hub - GA4, GSC, Google Ads, Facebook Ads, Bing Webmaster",
     url: "https://trafficflow.io",
     siteName: "TrafficFlow",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "TrafficFlow v29.0 Enterprise",
+    title: "TrafficFlow v30.0 Enterprise",
     description: "Enterprise-grade traffic management with full integrations hub - GA4, GSC, Google Ads, Facebook Ads, Bing Webmaster",
   },
 };
