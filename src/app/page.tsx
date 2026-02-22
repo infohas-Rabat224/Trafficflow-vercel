@@ -9484,12 +9484,20 @@ interface Campaign {
   stats: {
     hits: number;
   };
-  // Scheduled Campaign Fields
+  // Scheduled Campaign Fields (START)
   scheduledDate?: string; // ISO date string (YYYY-MM-DD)
   scheduledTime?: string; // Time string (HH:MM)
-  scheduledEnabled?: boolean; // Whether scheduling is enabled
+  scheduledEnabled?: boolean; // Whether start scheduling is enabled
   lastRunAt?: string; // Last time campaign was triggered
   nextRunAt?: string; // Next scheduled run time
+  
+  // Scheduled STOP/PAUSE Fields
+  stopScheduledEnabled?: boolean; // Whether stop scheduling is enabled
+  stopDate?: string; // ISO date string for stop (YYYY-MM-DD)
+  stopTime?: string; // Time string for stop (HH:MM)
+  stopAction?: 'pause' | 'stop'; // Whether to pause or fully stop
+  nextStopAt?: string; // Next scheduled stop time
+  lastStoppedAt?: string; // Last time campaign was stopped
 }
 
 // --- Log Interface ---
@@ -11558,7 +11566,7 @@ const MainContent = () => {
   // Ref to track if we're currently checking
   const scheduledCheckRef = useRef(false);
   
-  // Check for scheduled campaigns that need to start - runs on every render
+  // Check for scheduled campaigns that need to START or STOP
   useEffect(() => {
     // Prevent multiple simultaneous checks
     if (scheduledCheckRef.current) return;
@@ -11570,28 +11578,26 @@ const MainContent = () => {
       const nowISO = now.toISOString();
       const gmtString = now.toISOString().slice(0, 19);
       
-      // Find campaigns that are scheduled and their time has come
+      // ============================================
+      // CHECK FOR CAMPAIGNS TO ACTIVATE (START)
+      // ============================================
       const campaignsToActivate = campaigns.filter(c => {
-        // Check if campaign is scheduled with enabled scheduling
         if (!c.scheduledEnabled) return false;
         if (c.status !== 'scheduled') return false;
         if (!c.nextRunAt && !c.scheduledDate) return false;
         
-        // Parse the scheduled time - treat as GMT/UTC
         let scheduledTime: Date;
         if (c.nextRunAt) {
           scheduledTime = new Date(c.nextRunAt);
         } else if (c.scheduledDate && c.scheduledTime) {
-          // Treat scheduled time as GMT/UTC by adding 'Z' suffix
           scheduledTime = new Date(`${c.scheduledDate}T${c.scheduledTime}:00Z`);
         } else {
           return false;
         }
         
-        // Check if scheduled time has passed (GMT comparison)
         const hasPassed = scheduledTime <= now;
         if (c.scheduledEnabled) {
-          console.log(`[AutoScheduler] "${c.name}": Scheduled ${scheduledTime.toISOString()}, Now ${gmtString}, Passed: ${hasPassed}`);
+          console.log(`[AutoScheduler-START] "${c.name}": Scheduled ${scheduledTime.toISOString()}, Now ${gmtString}, Passed: ${hasPassed}`);
         }
         return hasPassed;
       });
@@ -11599,7 +11605,7 @@ const MainContent = () => {
       if (campaignsToActivate.length > 0) {
         console.log(`[AutoScheduler] ✅ Activating ${campaignsToActivate.length} scheduled campaign(s)`);
         
-        // Start the engine if not running
+        // Start the engine
         setIsEngineRunning(prev => {
           if (!prev) {
             addToast?.('🚀 Engine auto-started for scheduled campaigns', 'success');
@@ -11608,7 +11614,7 @@ const MainContent = () => {
           return prev;
         });
         
-        // Update campaign statuses to active (like clicking START button)
+        // Update campaign statuses to active
         setCampaigns(prev => prev.map(c => {
           if (campaignsToActivate.some(scheduled => scheduled.id === c.id)) {
             console.log(`[AutoScheduler] ✅ Campaign "${c.name}" activated!`);
@@ -11617,15 +11623,70 @@ const MainContent = () => {
               status: 'active' as const,
               lastRunAt: nowISO,
               nextRunAt: undefined,
-              scheduledEnabled: false // Disable scheduling after activation
+              scheduledEnabled: false
             };
           }
           return c;
         }));
         
-        // Show toast for each activated campaign
         campaignsToActivate.forEach(c => {
           addToast?.(`⏰ Scheduled campaign "${c.name}" is now RUNNING!`, 'success');
+        });
+      }
+      
+      // ============================================
+      // CHECK FOR CAMPAIGNS TO STOP/PAUSE
+      // ============================================
+      const campaignsToStop = campaigns.filter(c => {
+        if (!c.stopScheduledEnabled) return false;
+        if (c.status !== 'active') return false; // Only stop active campaigns
+        if (!c.nextStopAt && !c.stopDate) return false;
+        
+        let stopTime: Date;
+        if (c.nextStopAt) {
+          stopTime = new Date(c.nextStopAt);
+        } else if (c.stopDate && c.stopTime) {
+          stopTime = new Date(`${c.stopDate}T${c.stopTime}:00Z`);
+        } else {
+          return false;
+        }
+        
+        const hasPassed = stopTime <= now;
+        if (c.stopScheduledEnabled) {
+          console.log(`[AutoScheduler-STOP] "${c.name}": Stop at ${stopTime.toISOString()}, Now ${gmtString}, Passed: ${hasPassed}`);
+        }
+        return hasPassed;
+      });
+      
+      if (campaignsToStop.length > 0) {
+        console.log(`[AutoScheduler] ⏸️ Stopping ${campaignsToStop.length} campaign(s)`);
+        
+        // Pause campaigns
+        setCampaigns(prev => prev.map(c => {
+          if (campaignsToStop.some(stop => stop.id === c.id)) {
+            console.log(`[AutoScheduler] ⏸️ Campaign "${c.name}" stopped!`);
+            return {
+              ...c,
+              status: 'paused' as const,
+              lastStoppedAt: nowISO,
+              nextStopAt: undefined,
+              stopScheduledEnabled: false
+            };
+          }
+          return c;
+        }));
+        
+        // Check if any campaigns are still active
+        const stillActive = campaigns.filter(c => c.status === 'active' && !campaignsToStop.some(s => s.id === c.id));
+        if (stillActive.length === 0 && campaignsToStop.length > 0) {
+          // No more active campaigns, stop engine
+          setIsEngineRunning(false);
+          addToast?.('⏹️ Engine stopped - all campaigns paused', 'info');
+        }
+        
+        campaignsToStop.forEach(c => {
+          const action = c.stopAction || 'pause';
+          addToast?.(`⏸️ Campaign "${c.name}" auto-${action === 'stop' ? 'STOPPED' : 'PAUSED'}!`, 'info');
         });
       }
       
@@ -11635,14 +11696,14 @@ const MainContent = () => {
     // Check immediately on mount
     checkScheduledCampaigns();
     
-    // Check every 10 seconds (more frequent for better reliability)
+    // Check every 10 seconds
     const interval = setInterval(checkScheduledCampaigns, 10000);
     
     return () => {
       clearInterval(interval);
       scheduledCheckRef.current = false;
     };
-  }, [campaigns]); // Only depend on campaigns
+  }, [campaigns]);
   
   // Separate effect to handle engine start without circular dependency
   useEffect(() => {
@@ -13063,18 +13124,30 @@ Report generated for: ${domain}
         if (countryObj) resolvedCode = countryObj.code;
     }
     
-    // Handle scheduling data
+    // Handle START scheduling data
     const scheduledEnabled = formData.get('scheduledEnabled') === 'on';
     const scheduledDate = formData.get('scheduledDate') as string;
     const scheduledTime = formData.get('scheduledTime') as string;
+    
+    // Handle STOP/PAUSE scheduling data
+    const stopScheduledEnabled = formData.get('stopScheduledEnabled') === 'on';
+    const stopDate = formData.get('stopDate') as string;
+    const stopTime = formData.get('stopTime') as string;
+    const stopAction = formData.get('stopAction') as 'pause' | 'stop' || 'pause';
     
     // Calculate next run time if scheduling is enabled
     let nextRunAt: string | undefined = undefined;
     let campaignStatus: 'active' | 'paused' | 'scheduled' = editingCampaign ? editingCampaign.status : 'paused';
     
     if (scheduledEnabled && scheduledDate && scheduledTime) {
-      nextRunAt = `${scheduledDate}T${scheduledTime}:00`;
+      nextRunAt = `${scheduledDate}T${scheduledTime}:00Z`; // GMT
       campaignStatus = 'scheduled';
+    }
+    
+    // Calculate next stop time
+    let nextStopAt: string | undefined = undefined;
+    if (stopScheduledEnabled && stopDate && stopTime) {
+      nextStopAt = `${stopDate}T${stopTime}:00Z`; // GMT
     }
     
     const newCamp: Campaign = {
@@ -13101,20 +13174,26 @@ Report generated for: ${domain}
       returningVisitors: formData.get('returningVisitors') === 'on',
       targetOS: formData.get('targetOS') as string,
       stats: editingCampaign?.stats || { hits: 0 },
-      // Scheduling fields
+      // START Scheduling fields
       scheduledEnabled,
       scheduledDate: scheduledEnabled ? scheduledDate : undefined,
       scheduledTime: scheduledEnabled ? scheduledTime : undefined,
       nextRunAt,
-      lastRunAt: editingCampaign?.lastRunAt
+      lastRunAt: editingCampaign?.lastRunAt,
+      // STOP/PAUSE Scheduling fields
+      stopScheduledEnabled,
+      stopDate: stopScheduledEnabled ? stopDate : undefined,
+      stopTime: stopScheduledEnabled ? stopTime : undefined,
+      stopAction: stopScheduledEnabled ? stopAction : undefined,
+      nextStopAt,
+      lastStoppedAt: editingCampaign?.lastStoppedAt
     };
     if (editingCampaign) { setCampaigns(prev => prev.map(c => c.id === newCamp.id ? newCamp : c)); } 
     else { setCampaigns(prev => [...prev, newCamp]); }
     
-    const scheduleMsg = scheduledEnabled 
-      ? ` Campaign scheduled for ${scheduledDate} at ${scheduledTime}` 
-      : '';
-    addToast?.(editingCampaign ? `Campaign Updated${scheduleMsg}` : `New Campaign Created${scheduleMsg}`, "success");
+    const startMsg = scheduledEnabled ? ` START: ${scheduledDate} ${scheduledTime} GMT` : '';
+    const stopMsg = stopScheduledEnabled ? ` STOP: ${stopDate} ${stopTime} GMT` : '';
+    addToast?.(editingCampaign ? `Campaign Updated${startMsg}${stopMsg}` : `New Campaign Created${startMsg}${stopMsg}`, "success");
     setShowNewCampaignModal(false); 
     setEditingCampaign(null);
   };
@@ -13485,92 +13564,124 @@ End of Report
            </div>
            
            {/* Scheduled Campaigns Indicator */}
-           {campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length > 0 && (
-             <div className="mb-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
-               <div className="flex items-center justify-between mb-1">
-                 <span className="text-[10px] font-bold text-purple-700 flex items-center gap-1">
-                   <Calendar size={10} />
-                   Scheduled: {campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length}
-                 </span>
-                 <button 
-                   onClick={() => {
-                     // Force check and activate scheduled campaigns
-                     const now = new Date();
-                     const nowISO = now.toISOString();
-                     const gmtString = now.toISOString().slice(0, 19);
-                     
-                     const toActivate = campaigns.filter(c => {
-                       if (!c.scheduledEnabled || c.status !== 'scheduled') return false;
-                       
-                       // Parse scheduled time - treat as GMT
-                       let scheduledTime: Date;
-                       if (c.nextRunAt) {
-                         scheduledTime = new Date(c.nextRunAt);
-                       } else if (c.scheduledDate && c.scheduledTime) {
-                         // Treat scheduled time as GMT/UTC
-                         scheduledTime = new Date(`${c.scheduledDate}T${c.scheduledTime}:00Z`);
-                       } else {
-                         return false;
-                       }
-                       
-                       // Check if scheduled time has passed (compare with GMT)
-                       const hasPassed = scheduledTime <= now;
-                       console.log(`[Scheduler] Campaign "${c.name}": Scheduled ${scheduledTime.toISOString()}, Now ${gmtString}, Passed: ${hasPassed}`);
-                       return hasPassed;
-                     });
-                     
-                     if (toActivate.length > 0) {
-                       // Start the engine first
-                       setIsEngineRunning(true);
-                       
-                       // Activate each campaign (like clicking the START button)
-                       setCampaigns(prev => prev.map(c => {
-                         if (toActivate.some(s => s.id === c.id)) {
-                           console.log(`[Scheduler] ✅ Activating campaign: ${c.name}`);
-                           return { 
-                             ...c, 
-                             status: 'active' as const, 
-                             lastRunAt: nowISO, 
-                             scheduledEnabled: false,
-                             nextRunAt: undefined
-                           };
+           {(campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length > 0 || campaigns.filter(c => c.status === 'active' && c.stopScheduledEnabled).length > 0) && (
+             <div className="mb-2 space-y-1">
+               {/* START Schedules */}
+               {campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length > 0 && (
+                 <div className="p-2 bg-purple-50 border border-purple-200 rounded-lg">
+                   <div className="flex items-center justify-between mb-1">
+                     <span className="text-[10px] font-bold text-purple-700 flex items-center gap-1">
+                       <Play size={10} />
+                       START: {campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length}
+                     </span>
+                     <button 
+                       onClick={() => {
+                         const now = new Date();
+                         const nowISO = now.toISOString();
+                         const toActivate = campaigns.filter(c => {
+                           if (!c.scheduledEnabled || c.status !== 'scheduled') return false;
+                           let scheduledTime: Date;
+                           if (c.nextRunAt) {
+                             scheduledTime = new Date(c.nextRunAt);
+                           } else if (c.scheduledDate && c.scheduledTime) {
+                             scheduledTime = new Date(`${c.scheduledDate}T${c.scheduledTime}:00Z`);
+                           } else return false;
+                           return scheduledTime <= now;
+                         });
+                         
+                         if (toActivate.length > 0) {
+                           setIsEngineRunning(true);
+                           setCampaigns(prev => prev.map(c => {
+                             if (toActivate.some(s => s.id === c.id)) {
+                               return { ...c, status: 'active' as const, lastRunAt: nowISO, scheduledEnabled: false, nextRunAt: undefined };
+                             }
+                             return c;
+                           }));
+                           toActivate.forEach(c => addToast?.(`✅ "${c.name}" STARTED!`, 'success'));
+                         } else {
+                           addToast?.(`⏰ No campaigns ready to start yet`, 'info');
                          }
-                         return c;
-                       }));
-                       
-                       // Show success toast
-                       toActivate.forEach(c => {
-                         addToast?.(`✅ Campaign "${c.name}" STARTED!`, 'success');
-                       });
-                       
-                       addToast?.(`🚀 Engine started + ${toActivate.length} campaign(s) activated!`, 'success');
-                     } else {
-                       // Show info with time details
-                       const scheduled = campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled);
-                       const timesStr = scheduled.map(c => {
-                         const t = c.nextRunAt || `${c.scheduledDate}T${c.scheduledTime}:00Z`;
-                         return `${c.name}: ${t}`;
-                       }).join(', ');
-                       addToast?.(`⏰ Not yet time. Current GMT: ${gmtString}. Scheduled: ${timesStr}`, 'info');
-                     }
-                   }}
-                   className="text-[9px] font-bold text-purple-600 hover:text-purple-800 underline"
-                 >
-                   Check Now
-                 </button>
-               </div>
-               <div className="text-[9px] text-purple-600">
-                 Next: {(() => {
-                   const scheduled = campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled && c.scheduledDate);
-                   if (scheduled.length === 0) return 'No schedule';
-                   const next = scheduled.sort((a, b) => {
-                     const aTime = a.nextRunAt || `${a.scheduledDate}T${a.scheduledTime}:00Z`;
-                     const bTime = b.nextRunAt || `${b.scheduledDate}T${b.scheduledTime}:00Z`;
-                     return new Date(aTime).getTime() - new Date(bTime).getTime();
-                   })[0];
-                   return `${next.scheduledDate} ${next.scheduledTime} GMT`;
-                 })()}
-               </div>
+                       }}
+                       className="text-[9px] font-bold text-purple-600 hover:text-purple-800 underline"
+                     >
+                       Check
+                     </button>
+                   </div>
+                   <div className="text-[9px] text-purple-600">
+                     Next: {(() => {
+                       const scheduled = campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled && c.scheduledDate);
+                       if (scheduled.length === 0) return 'No schedule';
+                       const next = scheduled.sort((a, b) => {
+                         const aTime = a.nextRunAt || `${a.scheduledDate}T${a.scheduledTime}:00Z`;
+                         const bTime = b.nextRunAt || `${b.scheduledDate}T${b.scheduledTime}:00Z`;
+                         return new Date(aTime).getTime() - new Date(bTime).getTime();
+                       })[0];
+                       return `${next.scheduledDate} ${next.scheduledTime}`;
+                     })()}
+                   </div>
+                 </div>
+               )}
+               
+               {/* STOP/PAUSE Schedules */}
+               {campaigns.filter(c => c.status === 'active' && c.stopScheduledEnabled).length > 0 && (
+                 <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg">
+                   <div className="flex items-center justify-between mb-1">
+                     <span className="text-[10px] font-bold text-rose-700 flex items-center gap-1">
+                       <Pause size={10} />
+                       STOP: {campaigns.filter(c => c.status === 'active' && c.stopScheduledEnabled).length}
+                     </span>
+                     <button 
+                       onClick={() => {
+                         const now = new Date();
+                         const nowISO = now.toISOString();
+                         const toStop = campaigns.filter(c => {
+                           if (!c.stopScheduledEnabled || c.status !== 'active') return false;
+                           let stopTime: Date;
+                           if (c.nextStopAt) {
+                             stopTime = new Date(c.nextStopAt);
+                           } else if (c.stopDate && c.stopTime) {
+                             stopTime = new Date(`${c.stopDate}T${c.stopTime}:00Z`);
+                           } else return false;
+                           return stopTime <= now;
+                         });
+                         
+                         if (toStop.length > 0) {
+                           setCampaigns(prev => prev.map(c => {
+                             if (toStop.some(s => s.id === c.id)) {
+                               return { ...c, status: 'paused' as const, lastStoppedAt: nowISO, stopScheduledEnabled: false, nextStopAt: undefined };
+                             }
+                             return c;
+                           }));
+                           
+                           const stillActive = campaigns.filter(c => c.status === 'active' && !toStop.some(s => s.id === c.id));
+                           if (stillActive.length === 0) {
+                             setIsEngineRunning(false);
+                           }
+                           
+                           toStop.forEach(c => addToast?.(`⏸️ "${c.name}" PAUSED!`, 'info'));
+                         } else {
+                           addToast?.(`⏰ No campaigns ready to stop yet`, 'info');
+                         }
+                       }}
+                       className="text-[9px] font-bold text-rose-600 hover:text-rose-800 underline"
+                     >
+                       Check
+                     </button>
+                   </div>
+                   <div className="text-[9px] text-rose-600">
+                     Next: {(() => {
+                       const stopping = campaigns.filter(c => c.status === 'active' && c.stopScheduledEnabled && c.stopDate);
+                       if (stopping.length === 0) return 'No schedule';
+                       const next = stopping.sort((a, b) => {
+                         const aTime = a.nextStopAt || `${a.stopDate}T${a.stopTime}:00Z`;
+                         const bTime = b.nextStopAt || `${b.stopDate}T${b.stopTime}:00Z`;
+                         return new Date(aTime).getTime() - new Date(bTime).getTime();
+                       })[0];
+                       return `${next.stopDate} ${next.stopTime}`;
+                     })()}
+                   </div>
+                 </div>
+               )}
              </div>
            )}
            <button onClick={handleLogout} className="w-full py-2 rounded-lg text-[10px] font-bold mb-2 shadow-sm bg-rose-100 text-rose-600 flex items-center justify-center gap-2 hover:bg-rose-200 transition-colors"><LogOut size={12}/> Logout</button>
@@ -23386,6 +23497,8 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                        <Calendar size={14} />
                        4. Campaign Schedule (Optional)
                      </h4>
+                     
+                     {/* START Schedule */}
                      <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl">
                        {/* Current GMT Time Display */}
                        <div className="mb-3 p-2 bg-white border border-purple-200 rounded-lg">
@@ -23402,7 +23515,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                        
                        <label className="flex items-center gap-2 text-xs font-bold text-purple-700 cursor-pointer mb-4">
                          <input type="checkbox" name="scheduledEnabled" defaultChecked={editingCampaign?.scheduledEnabled} className="w-4 h-4" />
-                         Enable Scheduled Run
+                         🟢 Enable Scheduled START
                        </label>
                        <div className="grid grid-cols-2 gap-4">
                          <div className="space-y-2">
@@ -23426,8 +23539,52 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                          </div>
                        </div>
                        <p className="text-[10px] text-purple-600 mt-3 flex items-center gap-1">
-                         <Clock size={12} />
-                         Campaign will auto-start at scheduled GMT time + trigger engine
+                         <Play size={12} />
+                         Campaign will auto-START at scheduled GMT time + trigger engine
+                       </p>
+                     </div>
+                     
+                     {/* STOP/PAUSE Schedule */}
+                     <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl">
+                       <label className="flex items-center gap-2 text-xs font-bold text-rose-700 cursor-pointer mb-4">
+                         <input type="checkbox" name="stopScheduledEnabled" defaultChecked={editingCampaign?.stopScheduledEnabled} className="w-4 h-4" />
+                         🔴 Enable Scheduled STOP/PAUSE
+                       </label>
+                       <div className="grid grid-cols-2 gap-4 mb-4">
+                         <div className="space-y-2">
+                           <label className="text-[11px] font-bold text-slate-500 uppercase">Stop Date (GMT)</label>
+                           <input 
+                             type="date" 
+                             name="stopDate" 
+                             defaultValue={editingCampaign?.stopDate || new Date().toISOString().split('T')[0]}
+                             min={new Date().toISOString().split('T')[0]}
+                             className="w-full p-3 bg-white rounded-xl border outline-none"
+                           />
+                         </div>
+                         <div className="space-y-2">
+                           <label className="text-[11px] font-bold text-slate-500 uppercase">Stop Time (GMT)</label>
+                           <input 
+                             type="time" 
+                             name="stopTime" 
+                             defaultValue={editingCampaign?.stopTime || '17:00'}
+                             className="w-full p-3 bg-white rounded-xl border outline-none"
+                           />
+                         </div>
+                       </div>
+                       <div className="space-y-2">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Stop Action</label>
+                         <select 
+                           name="stopAction" 
+                           defaultValue={editingCampaign?.stopAction || 'pause'}
+                           className="w-full p-3 bg-white rounded-xl border outline-none text-sm"
+                         >
+                           <option value="pause">⏸️ PAUSE - Campaign can be resumed later</option>
+                           <option value="stop">⏹️ STOP - Full stop (same as pause)</option>
+                         </select>
+                       </div>
+                       <p className="text-[10px] text-rose-600 mt-3 flex items-center gap-1">
+                         <Pause size={12} />
+                         Campaign will auto-PAUSE at scheduled GMT time
                        </p>
                      </div>
                   </div>
