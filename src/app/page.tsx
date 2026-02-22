@@ -274,6 +274,534 @@ const ReferrerManager = {
   }
 };
 
+// ============================================================
+// REFERRER SOURCE CONFIGURATION (v31.0)
+// Comprehensive referrer management for organic traffic simulation
+// ============================================================
+
+interface ReferrerSource {
+  id: string;
+  name: string;
+  category: 'search' | 'social' | 'direct' | 'email' | 'custom' | 'ai';
+  urlTemplate: string;
+  hasKeyword: boolean;
+  marketShare: number;
+  variations?: string[];
+}
+
+const ReferrerSourceDatabase: ReferrerSource[] = [
+  // ========== SEARCH ENGINE REFERRERS ==========
+  {
+    id: 'google_organic',
+    name: 'Google Search (Organic)',
+    category: 'search',
+    urlTemplate: 'https://www.google.com/search?q={keyword}&oq={keyword}&sourceid=chrome&ie=UTF-8',
+    hasKeyword: true,
+    marketShare: 65,
+    variations: [
+      'https://www.google.com/search?q={keyword}',
+      'https://www.google.com/search?q={keyword}&sca_esv=',
+      'https://www.google.com/search?q={keyword}&hl=en&source=hp',
+      'https://www.google.com/search?q={keyword}&biw=1920&bih=969'
+    ]
+  },
+  {
+    id: 'google_ads',
+    name: 'Google Ads (Paid)',
+    category: 'search',
+    urlTemplate: 'https://www.googleadservices.com/pagead/aclk?sa=L&ai={random}&q={keyword}',
+    hasKeyword: true,
+    marketShare: 5
+  },
+  {
+    id: 'bing',
+    name: 'Bing Search',
+    category: 'search',
+    urlTemplate: 'https://www.bing.com/search?q={keyword}&form=QBLH&sp=-1&lq=0&pq={keyword}',
+    hasKeyword: true,
+    marketShare: 8,
+    variations: [
+      'https://www.bing.com/search?q={keyword}',
+      'https://www.bing.com/search?q={keyword}&cvid=',
+      'https://www.bing.com/search?q={keyword}&form=ANNTH1&refig='
+    ]
+  },
+  {
+    id: 'yahoo',
+    name: 'Yahoo Search',
+    category: 'search',
+    urlTemplate: 'https://search.yahoo.com/search?p={keyword}&fr=yfp-t&ei=UTF-8',
+    hasKeyword: true,
+    marketShare: 3
+  },
+  {
+    id: 'duckduckgo',
+    name: 'DuckDuckGo',
+    category: 'search',
+    urlTemplate: 'https://duckduckgo.com/?q={keyword}&t=h_&ia=web',
+    hasKeyword: true,
+    marketShare: 2
+  },
+  {
+    id: 'baidu',
+    name: 'Baidu Search',
+    category: 'search',
+    urlTemplate: 'https://www.baidu.com/s?wd={keyword}&rsv_spt=1&rsv_iqid=',
+    hasKeyword: true,
+    marketShare: 5
+  },
+  {
+    id: 'yandex',
+    name: 'Yandex Search',
+    category: 'search',
+    urlTemplate: 'https://yandex.com/search/?text={keyword}&lr=',
+    hasKeyword: true,
+    marketShare: 2
+  },
+  
+  // ========== SOCIAL MEDIA REFERRERS ==========
+  {
+    id: 'facebook',
+    name: 'Facebook',
+    category: 'social',
+    urlTemplate: 'https://l.facebook.com/l.php?u={target}&h={hash}',
+    hasKeyword: false,
+    marketShare: 12,
+    variations: [
+      'https://l.facebook.com/',
+      'https://m.facebook.com/',
+      'https://www.facebook.com/',
+      'https://facebook.com/'
+    ]
+  },
+  {
+    id: 'twitter',
+    name: 'X (Twitter)',
+    category: 'social',
+    urlTemplate: 'https://t.co/{shortCode}',
+    hasKeyword: false,
+    marketShare: 6,
+    variations: [
+      'https://t.co/',
+      'https://twitter.com/',
+      'https://x.com/'
+    ]
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    category: 'social',
+    urlTemplate: 'https://www.linkedin.com/feed/update/urn:li:activity:{id}',
+    hasKeyword: false,
+    marketShare: 4,
+    variations: [
+      'https://www.linkedin.com/',
+      'https://linkedin.com/',
+      'https://www.linkedin.com/feed/'
+    ]
+  },
+  {
+    id: 'reddit',
+    name: 'Reddit',
+    category: 'social',
+    urlTemplate: 'https://www.reddit.com/r/{subreddit}/comments/{id}/',
+    hasKeyword: false,
+    marketShare: 3,
+    variations: [
+      'https://www.reddit.com/',
+      'https://reddit.com/',
+      'https://old.reddit.com/'
+    ]
+  },
+  {
+    id: 'pinterest',
+    name: 'Pinterest',
+    category: 'social',
+    urlTemplate: 'https://www.pinterest.com/pin/{id}/',
+    hasKeyword: false,
+    marketShare: 2,
+    variations: [
+      'https://www.pinterest.com/',
+      'https://pinterest.com/',
+      'https://pin.it/'
+    ]
+  },
+  {
+    id: 'instagram',
+    name: 'Instagram',
+    category: 'social',
+    urlTemplate: 'https://l.instagram.com/?u={target}&e={hash}',
+    hasKeyword: false,
+    marketShare: 5,
+    variations: [
+      'https://l.instagram.com/',
+      'https://www.instagram.com/',
+      'https://instagram.com/'
+    ]
+  },
+  {
+    id: 'tiktok',
+    name: 'TikTok',
+    category: 'social',
+    urlTemplate: 'https://www.tiktok.com/t/{id}',
+    hasKeyword: false,
+    marketShare: 4,
+    variations: [
+      'https://www.tiktok.com/',
+      'https://tiktok.com/',
+      'https://vm.tiktok.com/'
+    ]
+  },
+  {
+    id: 'youtube',
+    name: 'YouTube',
+    category: 'social',
+    urlTemplate: 'https://www.youtube.com/watch?v={id}&feature=share',
+    hasKeyword: false,
+    marketShare: 5,
+    variations: [
+      'https://www.youtube.com/',
+      'https://youtube.com/',
+      'https://youtu.be/'
+    ]
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp',
+    category: 'social',
+    urlTemplate: 'https://web.whatsapp.com/',
+    hasKeyword: false,
+    marketShare: 3
+  },
+  {
+    id: 'telegram',
+    name: 'Telegram',
+    category: 'social',
+    urlTemplate: 'https://t.me/{channel}/{id}',
+    hasKeyword: false,
+    marketShare: 2
+  },
+  {
+    id: 'discord',
+    name: 'Discord',
+    category: 'social',
+    urlTemplate: 'https://discord.com/channels/{server}/{channel}',
+    hasKeyword: false,
+    marketShare: 1
+  },
+  {
+    id: 'quora',
+    name: 'Quora',
+    category: 'social',
+    urlTemplate: 'https://www.quora.com/q/{topic}/{question}',
+    hasKeyword: false,
+    marketShare: 1
+  },
+  
+  // ========== DIRECT TRAFFIC ==========
+  {
+    id: 'direct',
+    name: 'Direct (No Referrer)',
+    category: 'direct',
+    urlTemplate: '',
+    hasKeyword: false,
+    marketShare: 20
+  },
+  {
+    id: 'bookmark',
+    name: 'Bookmark',
+    category: 'direct',
+    urlTemplate: '',
+    hasKeyword: false,
+    marketShare: 5
+  },
+  {
+    id: 'typed_url',
+    name: 'Typed URL',
+    category: 'direct',
+    urlTemplate: '',
+    hasKeyword: false,
+    marketShare: 5
+  },
+  
+  // ========== EMAIL REFERRERS ==========
+  {
+    id: 'gmail',
+    name: 'Gmail',
+    category: 'email',
+    urlTemplate: 'https://mail.google.com/mail/u/0/#inbox/{id}',
+    hasKeyword: false,
+    marketShare: 3
+  },
+  {
+    id: 'outlook',
+    name: 'Outlook',
+    category: 'email',
+    urlTemplate: 'https://outlook.live.com/mail/0/inbox/id/{id}',
+    hasKeyword: false,
+    marketShare: 2
+  },
+  {
+    id: 'newsletter',
+    name: 'Newsletter',
+    category: 'email',
+    urlTemplate: 'https://email.{domain}/link/{id}',
+    hasKeyword: false,
+    marketShare: 2
+  },
+  
+  // ========== AI SEARCH REFERRERS ==========
+  {
+    id: 'chatgpt',
+    name: 'ChatGPT',
+    category: 'ai',
+    urlTemplate: 'https://chat.openai.com/',
+    hasKeyword: false,
+    marketShare: 2
+  },
+  {
+    id: 'perplexity',
+    name: 'Perplexity AI',
+    category: 'ai',
+    urlTemplate: 'https://www.perplexity.ai/search?q={keyword}',
+    hasKeyword: true,
+    marketShare: 1
+  },
+  {
+    id: 'claude',
+    name: 'Claude AI',
+    category: 'ai',
+    urlTemplate: 'https://claude.ai/',
+    hasKeyword: false,
+    marketShare: 1
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    category: 'ai',
+    urlTemplate: 'https://gemini.google.com/',
+    hasKeyword: false,
+    marketShare: 1
+  },
+  {
+    id: 'copilot',
+    name: 'Microsoft Copilot',
+    category: 'ai',
+    urlTemplate: 'https://copilot.microsoft.com/',
+    hasKeyword: false,
+    marketShare: 1
+  }
+];
+
+// Referrer Configuration Manager
+const ReferrerConfigManager = {
+  // Get all sources
+  getAllSources: (): ReferrerSource[] => ReferrerSourceDatabase,
+  
+  // Get sources by category
+  getSourcesByCategory: (category: string): ReferrerSource[] => 
+    ReferrerSourceDatabase.filter(s => s.category === category),
+  
+  // Get source by ID
+  getSourceById: (id: string): ReferrerSource | undefined => 
+    ReferrerSourceDatabase.find(s => s.id === id),
+  
+  // Get weighted random source based on market share
+  getWeightedRandomSource: (filters?: {
+    categories?: string[];
+    sourceIds?: string[];
+    excludeIds?: string[];
+  }): ReferrerSource => {
+    let pool = [...ReferrerSourceDatabase];
+    
+    // Apply filters
+    if (filters?.categories && filters.categories.length > 0) {
+      pool = pool.filter(s => filters.categories!.includes(s.category));
+    }
+    if (filters?.sourceIds && filters.sourceIds.length > 0) {
+      pool = pool.filter(s => filters.sourceIds!.includes(s.id));
+    }
+    if (filters?.excludeIds && filters.excludeIds.length > 0) {
+      pool = pool.filter(s => !filters.excludeIds!.includes(s.id));
+    }
+    
+    if (pool.length === 0) {
+      pool = ReferrerSourceDatabase;
+    }
+    
+    // Weighted selection based on market share
+    const totalWeight = pool.reduce((sum, s) => sum + s.marketShare, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (const source of pool) {
+      random -= source.marketShare;
+      if (random <= 0) {
+        return source;
+      }
+    }
+    
+    return pool[0];
+  },
+  
+  // Generate referrer URL with keyword
+  generateReferrerUrl: (source: ReferrerSource, keyword?: string, targetUrl?: string): string => {
+    if (source.category === 'direct' || source.urlTemplate === '') {
+      return ''; // Direct traffic has no referrer
+    }
+    
+    let url = source.urlTemplate;
+    
+    // Use variation if available
+    if (source.variations && source.variations.length > 0) {
+      url = source.variations[Math.floor(Math.random() * source.variations.length)];
+    }
+    
+    // Replace placeholders
+    url = url.replace('{keyword}', encodeURIComponent(keyword || 'search'));
+    url = url.replace('{target}', encodeURIComponent(targetUrl || ''));
+    url = url.replace('{hash}', Math.random().toString(36).substring(2, 15));
+    url = url.replace('{id}', Math.random().toString(36).substring(2, 12));
+    url = url.replace('{shortCode}', Math.random().toString(36).substring(2, 8));
+    url = url.replace('{subreddit}', ['technology', 'marketing', 'business', 'seo'][Math.floor(Math.random() * 4)]);
+    url = url.replace('{channel}', Math.random().toString(36).substring(2, 8));
+    url = url.replace('{server}', Math.random().toString(36).substring(2, 10));
+    url = url.replace('{topic}', keyword?.split(' ')[0] || 'topic');
+    url = url.replace('{question}', Math.random().toString(36).substring(2, 10));
+    url = url.replace('{domain}', 'example');
+    url = url.replace('{random}', Math.random().toString(36).substring(2, 20));
+    
+    return url;
+  },
+  
+  // Get referrer based on rotation percentages
+  getReferrerByRotation: (config: {
+    googlePercent: number;
+    bingPercent: number;
+    yahooPercent: number;
+    duckduckgoPercent: number;
+    facebookPercent: number;
+    twitterPercent: number;
+    linkedinPercent: number;
+    redditPercent: number;
+    instagramPercent: number;
+    tiktokPercent: number;
+    youtubePercent: number;
+    directPercent: number;
+    customPercent: number;
+    customReferrer?: string;
+  }): { source: ReferrerSource; isCustom: boolean } => {
+    const rand = Math.random() * 100;
+    let cumulative = 0;
+    
+    // Search engines
+    cumulative += config.googlePercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('google_organic')!, isCustom: false };
+    }
+    cumulative += config.bingPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('bing')!, isCustom: false };
+    }
+    cumulative += config.yahooPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('yahoo')!, isCustom: false };
+    }
+    cumulative += config.duckduckgoPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('duckduckgo')!, isCustom: false };
+    }
+    
+    // Social media
+    cumulative += config.facebookPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('facebook')!, isCustom: false };
+    }
+    cumulative += config.twitterPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('twitter')!, isCustom: false };
+    }
+    cumulative += config.linkedinPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('linkedin')!, isCustom: false };
+    }
+    cumulative += config.redditPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('reddit')!, isCustom: false };
+    }
+    cumulative += config.instagramPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('instagram')!, isCustom: false };
+    }
+    cumulative += config.tiktokPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('tiktok')!, isCustom: false };
+    }
+    cumulative += config.youtubePercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('youtube')!, isCustom: false };
+    }
+    
+    // Direct
+    cumulative += config.directPercent;
+    if (rand < cumulative) {
+      return { source: ReferrerConfigManager.getSourceById('direct')!, isCustom: false };
+    }
+    
+    // Custom
+    if (config.customReferrer) {
+      return { 
+        source: {
+          id: 'custom',
+          name: 'Custom Referrer',
+          category: 'custom',
+          urlTemplate: config.customReferrer,
+          hasKeyword: false,
+          marketShare: 100
+        }, 
+        isCustom: true 
+      };
+    }
+    
+    // Default to Google
+    return { source: ReferrerConfigManager.getSourceById('google_organic')!, isCustom: false };
+  },
+  
+  // Get default rotation (balanced)
+  getDefaultRotation: () => ({
+    googlePercent: 45,
+    bingPercent: 8,
+    yahooPercent: 2,
+    duckduckgoPercent: 2,
+    facebookPercent: 15,
+    twitterPercent: 5,
+    linkedinPercent: 3,
+    redditPercent: 2,
+    instagramPercent: 5,
+    tiktokPercent: 3,
+    youtubePercent: 3,
+    directPercent: 7,
+    customPercent: 0,
+    customReferrer: ''
+  }),
+  
+  // Generate UTM parameters
+  generateUTM: (params: {
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    term?: string;
+    content?: string;
+  }): string => {
+    const utm: string[] = [];
+    if (params.source) utm.push(`utm_source=${encodeURIComponent(params.source)}`);
+    if (params.medium) utm.push(`utm_medium=${encodeURIComponent(params.medium)}`);
+    if (params.campaign) utm.push(`utm_campaign=${encodeURIComponent(params.campaign)}`);
+    if (params.term) utm.push(`utm_term=${encodeURIComponent(params.term)}`);
+    if (params.content) utm.push(`utm_content=${encodeURIComponent(params.content)}`);
+    return utm.length > 0 ? '?' + utm.join('&') : '';
+  }
+};
+
 // --- MODULE: FINGERPRINT ROTATOR (PRESERVED) ---
 const FingerprintRotator = {
   getRandomProfile: (targetOS: string, countryCode = 'US') => {
@@ -9970,6 +10498,44 @@ interface Campaign {
   // Enable Audio context variation
   enableAudioVariation?: boolean;
   
+  // ========== Referrer Source Configuration (v31.0) ==========
+  // Referrer mode: 'auto' = weighted by market share, 'rotation' = use custom percentages, 'single' = use single source
+  referrerMode?: 'auto' | 'rotation' | 'single';
+  
+  // Single referrer source ID (for 'single' mode)
+  referrerSourceId?: string;
+  
+  // Custom referrer URL (for custom source)
+  customReferrerUrl?: string;
+  
+  // Referrer rotation percentages (for 'rotation' mode)
+  referrerGooglePercent?: number;
+  referrerBingPercent?: number;
+  referrerYahooPercent?: number;
+  referrerDuckduckgoPercent?: number;
+  referrerFacebookPercent?: number;
+  referrerTwitterPercent?: number;
+  referrerLinkedinPercent?: number;
+  referrerRedditPercent?: number;
+  referrerInstagramPercent?: number;
+  referrerTiktokPercent?: number;
+  referrerYoutubePercent?: number;
+  referrerDirectPercent?: number;
+  referrerCustomPercent?: number;
+  
+  // UTM parameters
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmTerm?: string;
+  utmContent?: string;
+  
+  // Keyword injection in referrer URLs
+  injectKeywordInReferrer?: boolean;
+  
+  // Referrer category filter (for auto mode)
+  referrerCategories?: ('search' | 'social' | 'direct' | 'email' | 'ai')[];
+  
   stats: {
     hits: number;
   };
@@ -12340,90 +12906,165 @@ const MainContent = () => {
     let medium = 'referral';
     let referrer: string = ''; // GA4 Fix: Ensure dr is never undefined
     
-    const tType = (payload.trafficType || '').toLowerCase();
+    // ============================================================
+    // NEW: REFERRER SOURCE CONFIGURATION (v31.0)
+    // ============================================================
     
-    if (tType.includes('organic')) {
-        let engine = 'google';
-        if (tType === 'organic') {
-             const engines = ['google', 'bing', 'yahoo', 'duckduckgo', 'baidu', 'yandex'];
-             engine = engines[Math.floor(Math.random() * engines.length)];
-        } else {
-             engine = tType.replace('organic_', '');
-        }
-        source = engine;
-        medium = 'organic';
-        referrer = ReferrerManager.getOrganicSearch(engine, payload.entryPoint || 'keyword');
-    } else if (tType.includes('social')) {
-        let platform = 'facebook';
-        if (tType === 'social') {
-             const platforms = ['facebook', 'twitter', 'linkedin', 'instagram', 'pinterest', 'tiktok', 'reddit', 'quora', 'snapchat', 'whatsapp', 'telegram', 'discord', 'twitch'];
-             platform = platforms[Math.floor(Math.random() * platforms.length)];
-        } else {
-             platform = tType.replace('social_', '');
-        }
-        source = platform;
+    // Check if campaign has referrer configuration
+    if (payload.referrerMode) {
+      // Use new Referrer Configuration system (v31.0)
+      let referrerSource: ReferrerSource;
+      
+      if (payload.referrerMode === 'single' && payload.referrerSourceId) {
+        // Single source mode
+        referrerSource = ReferrerConfigManager.getSourceById(payload.referrerSourceId) || 
+                         ReferrerConfigManager.getSourceById('google_organic')!;
+      } else if (payload.referrerMode === 'rotation') {
+        // Custom rotation mode
+        const rotationResult = ReferrerConfigManager.getReferrerByRotation({
+          googlePercent: payload.referrerGooglePercent ?? 45,
+          bingPercent: payload.referrerBingPercent ?? 8,
+          yahooPercent: payload.referrerYahooPercent ?? 2,
+          duckduckgoPercent: payload.referrerDuckduckgoPercent ?? 2,
+          facebookPercent: payload.referrerFacebookPercent ?? 15,
+          twitterPercent: payload.referrerTwitterPercent ?? 5,
+          linkedinPercent: payload.referrerLinkedinPercent ?? 3,
+          redditPercent: payload.referrerRedditPercent ?? 2,
+          instagramPercent: payload.referrerInstagramPercent ?? 5,
+          tiktokPercent: payload.referrerTiktokPercent ?? 3,
+          youtubePercent: payload.referrerYoutubePercent ?? 3,
+          directPercent: payload.referrerDirectPercent ?? 7,
+          customPercent: 0,
+          customReferrer: payload.customReferrerUrl
+        });
+        referrerSource = rotationResult.source;
+      } else {
+        // Auto mode - use weighted market share
+        referrerSource = ReferrerConfigManager.getWeightedRandomSource({
+          categories: payload.referrerCategories
+        });
+      }
+      
+      // Generate referrer URL
+      const keyword = payload.injectKeywordInReferrer !== false ? (payload.entryPoint || 'search') : undefined;
+      referrer = ReferrerConfigManager.generateReferrerUrl(referrerSource, keyword, payload.url);
+      
+      // Set source and medium based on category
+      if (referrerSource.category === 'search') {
+        source = referrerSource.id === 'google_organic' ? 'google' : 
+                 referrerSource.id === 'google_ads' ? 'google' :
+                 referrerSource.id.replace('_organic', '').replace('_ads', '');
+        medium = referrerSource.id.includes('ads') ? 'cpc' : 'organic';
+      } else if (referrerSource.category === 'social') {
+        source = referrerSource.id;
         medium = 'social';
-        referrer = ReferrerManager.getSocial(platform);
-    } else if (tType.startsWith('ai_')) {
-        // GA4 Fix: Map AI traffic to referral channel (not ai_referral which causes "Unassigned")
-        if (tType === 'ai_search') {
-            source = 'openai';
-            medium = 'referral'; // Changed from 'ai_referral' to 'referral'
-            referrer = 'https://chatgpt.com';
-        } else {
-            const aiMap: Record<string, { s: string; r: string }> = {
-                'ai_chatgpt': { s: 'openai', r: 'https://chatgpt.com' },
-                'ai_claude': { s: 'anthropic', r: 'https://claude.ai' },
-                'ai_gemini': { s: 'google', r: 'https://gemini.google.com' },
-                'ai_perplexity': { s: 'perplexity', r: 'https://perplexity.ai' },
-                'ai_copilot': { s: 'microsoft', r: 'https://copilot.microsoft.com' }
-            };
-            const aiData = aiMap[tType] || { s: 'openai', r: 'https://openai.com' };
-            source = aiData.s;
-            medium = 'referral'; // Changed from 'ai_referral' to 'referral'
-            referrer = aiData.r;
-        }
-    } else if (tType.includes('direct')) {
+      } else if (referrerSource.category === 'direct') {
         source = '(direct)';
         medium = '(none)';
-        referrer = ''; // Direct traffic has no referrer
-    } else if (tType.includes('email')) {
-        source = 'newsletter';
+        referrer = '';
+      } else if (referrerSource.category === 'email') {
+        source = referrerSource.id === 'gmail' ? 'gmail' : 
+                 referrerSource.id === 'outlook' ? 'outlook' : 'newsletter';
         medium = 'email';
-        referrer = 'email://newsletter';
-    } else if (tType.startsWith('paid_') || tType.includes('cpc')) {
-         // GA4 Fix: Standardize paid media to match Default Channel Grouping
-         const paidMap: Record<string, { s: string; m: string }> = {
-            'paid_google': { s: 'google', m: 'cpc' },
-            'paid_facebook': { s: 'facebook', m: 'paid' }, // Changed from 'paid_social' to 'paid'
-            'paid_linkedin': { s: 'linkedin', m: 'paid' }, // Changed from 'paid_social' to 'paid'
-            'paid_bing': { s: 'bing', m: 'cpc' },
-            'paid_tiktok': { s: 'tiktok', m: 'paid' } // Changed from 'paid_video' to 'paid'
-         };
-         const pData = paidMap[tType] || { s: 'google', m: 'cpc' };
-         source = pData.s;
-         medium = pData.m;
-         // Set appropriate referrer for paid traffic
-         if (source === 'google') referrer = 'https://www.google.com/';
-         else if (source === 'bing') referrer = 'https://www.bing.com/';
-         else referrer = `https://www.${source}.com/`;
-         extraParams['gclid'] = 'CjwK' + Math.random().toString(36).substring(2, 15);
-    } else if (tType.includes('affiliate')) {
-        source = 'affiliate_partner';
-        medium = 'affiliate';
-        referrer = 'https://affiliate.partner.com/';
-    } else if (tType === 'gmb' || tType.startsWith('local_')) {
-        if (tType === 'local_yelp') { source = 'yelp'; referrer = 'https://yelp.com/'; }
-        else if (tType === 'local_tripadvisor') { source = 'tripadvisor'; referrer = 'https://tripadvisor.com/'; }
-        else { source = 'google'; referrer = 'https://www.google.com/maps/'; }
-        medium = 'organic';
-    } else if (payload.customReferrer) {
-        source = 'referral';
+      } else if (referrerSource.category === 'ai') {
+        source = referrerSource.id === 'chatgpt' ? 'openai' :
+                 referrerSource.id === 'claude' ? 'anthropic' :
+                 referrerSource.id === 'gemini' ? 'google' :
+                 referrerSource.id === 'copilot' ? 'microsoft' : 'ai';
         medium = 'referral';
-        referrer = payload.customReferrer;
+      } else if (referrerSource.category === 'custom') {
+        source = 'custom';
+        medium = 'referral';
+        referrer = payload.customReferrerUrl || '';
+      }
+      
+      // Apply UTM parameters if provided
+      if (payload.utmSource) source = payload.utmSource;
+      if (payload.utmMedium) medium = payload.utmMedium;
+      
     } else {
-        // Fallback: ensure referrer is always set
-        referrer = 'https://trafficflow.io/';
+      // Legacy referrer logic (backward compatible)
+      const tType = (payload.trafficType || '').toLowerCase();
+      
+      if (tType.includes('organic')) {
+          let engine = 'google';
+          if (tType === 'organic') {
+               const engines = ['google', 'bing', 'yahoo', 'duckduckgo', 'baidu', 'yandex'];
+               engine = engines[Math.floor(Math.random() * engines.length)];
+          } else {
+               engine = tType.replace('organic_', '');
+          }
+          source = engine;
+          medium = 'organic';
+          referrer = ReferrerManager.getOrganicSearch(engine, payload.entryPoint || 'keyword');
+      } else if (tType.includes('social')) {
+          let platform = 'facebook';
+          if (tType === 'social') {
+               const platforms = ['facebook', 'twitter', 'linkedin', 'instagram', 'pinterest', 'tiktok', 'reddit', 'quora', 'snapchat', 'whatsapp', 'telegram', 'discord', 'twitch'];
+               platform = platforms[Math.floor(Math.random() * platforms.length)];
+          } else {
+               platform = tType.replace('social_', '');
+          }
+          source = platform;
+          medium = 'social';
+          referrer = ReferrerManager.getSocial(platform);
+      } else if (tType.startsWith('ai_')) {
+          if (tType === 'ai_search') {
+              source = 'openai';
+              medium = 'referral';
+              referrer = 'https://chatgpt.com';
+          } else {
+              const aiMap: Record<string, { s: string; r: string }> = {
+                  'ai_chatgpt': { s: 'openai', r: 'https://chatgpt.com' },
+                  'ai_claude': { s: 'anthropic', r: 'https://claude.ai' },
+                  'ai_gemini': { s: 'google', r: 'https://gemini.google.com' },
+                  'ai_perplexity': { s: 'perplexity', r: 'https://perplexity.ai' },
+                  'ai_copilot': { s: 'microsoft', r: 'https://copilot.microsoft.com' }
+              };
+              const aiData = aiMap[tType] || { s: 'openai', r: 'https://openai.com' };
+              source = aiData.s;
+              medium = 'referral';
+              referrer = aiData.r;
+          }
+      } else if (tType.includes('direct')) {
+          source = '(direct)';
+          medium = '(none)';
+          referrer = '';
+      } else if (tType.includes('email')) {
+          source = 'newsletter';
+          medium = 'email';
+          referrer = 'email://newsletter';
+      } else if (tType.startsWith('paid_') || tType.includes('cpc')) {
+           const paidMap: Record<string, { s: string; m: string }> = {
+              'paid_google': { s: 'google', m: 'cpc' },
+              'paid_facebook': { s: 'facebook', m: 'paid' },
+              'paid_linkedin': { s: 'linkedin', m: 'paid' },
+              'paid_bing': { s: 'bing', m: 'cpc' },
+              'paid_tiktok': { s: 'tiktok', m: 'paid' }
+           };
+           const pData = paidMap[tType] || { s: 'google', m: 'cpc' };
+           source = pData.s;
+           medium = pData.m;
+           if (source === 'google') referrer = 'https://www.google.com/';
+           else if (source === 'bing') referrer = 'https://www.bing.com/';
+           else referrer = `https://www.${source}.com/`;
+           extraParams['gclid'] = 'CjwK' + Math.random().toString(36).substring(2, 15);
+      } else if (tType.includes('affiliate')) {
+          source = 'affiliate_partner';
+          medium = 'affiliate';
+          referrer = 'https://affiliate.partner.com/';
+      } else if (tType === 'gmb' || tType.startsWith('local_')) {
+          if (tType === 'local_yelp') { source = 'yelp'; referrer = 'https://yelp.com/'; }
+          else if (tType === 'local_tripadvisor') { source = 'tripadvisor'; referrer = 'https://tripadvisor.com/'; }
+          else { source = 'google'; referrer = 'https://www.google.com/maps/'; }
+          medium = 'organic';
+      } else if (payload.customReferrer) {
+          source = 'referral';
+          medium = 'referral';
+          referrer = payload.customReferrer;
+      } else {
+          referrer = 'https://trafficflow.io/';
+      }
     }
 
     const mockIP = getMockIP(payload.targeting?.countryCode || 'US');
@@ -13766,6 +14407,28 @@ Report generated for: ${domain}
       enableWebGLRotation: formData.get('enableWebGLRotation') === 'on',
       enableCanvasNoise: formData.get('enableCanvasNoise') === 'on',
       enableAudioVariation: formData.get('enableAudioVariation') === 'on',
+      
+      // ========== Referrer Source Configuration (v31.0) ==========
+      referrerMode: (formData.get('referrerMode') as 'auto' | 'rotation' | 'single') || 'auto',
+      referrerSourceId: formData.get('referrerSourceId') as string || undefined,
+      customReferrerUrl: formData.get('customReferrerUrl') as string || undefined,
+      referrerGooglePercent: parseInt(formData.get('referrerGooglePercent') as string) || 45,
+      referrerBingPercent: parseInt(formData.get('referrerBingPercent') as string) || 8,
+      referrerYahooPercent: parseInt(formData.get('referrerYahooPercent') as string) || 2,
+      referrerDuckduckgoPercent: parseInt(formData.get('referrerDuckduckgoPercent') as string) || 2,
+      referrerFacebookPercent: parseInt(formData.get('referrerFacebookPercent') as string) || 15,
+      referrerTwitterPercent: parseInt(formData.get('referrerTwitterPercent') as string) || 5,
+      referrerLinkedinPercent: parseInt(formData.get('referrerLinkedinPercent') as string) || 3,
+      referrerRedditPercent: parseInt(formData.get('referrerRedditPercent') as string) || 2,
+      referrerInstagramPercent: parseInt(formData.get('referrerInstagramPercent') as string) || 5,
+      referrerTiktokPercent: parseInt(formData.get('referrerTiktokPercent') as string) || 3,
+      referrerYoutubePercent: parseInt(formData.get('referrerYoutubePercent') as string) || 3,
+      referrerDirectPercent: parseInt(formData.get('referrerDirectPercent') as string) || 7,
+      utmSource: formData.get('utmSource') as string || undefined,
+      utmMedium: formData.get('utmMedium') as string || undefined,
+      utmCampaign: formData.get('utmCampaign') as string || undefined,
+      utmTerm: formData.get('utmTerm') as string || undefined,
+      injectKeywordInReferrer: formData.get('injectKeywordInReferrer') === 'on',
       
       // START Scheduling fields
       scheduledEnabled,
@@ -24284,11 +24947,182 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                      </div>
                   </div>
                   
+                  {/* Referrer Source Configuration Section */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold text-orange-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
+                       <Share2 size={14} />
+                       5. Referrer Source Configuration (v31.0)
+                     </h4>
+                     
+                     {/* Referrer Mode Selection */}
+                     <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl space-y-4">
+                       <div className="space-y-2">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Referrer Mode</label>
+                         <select 
+                           name="referrerMode" 
+                           defaultValue={editingCampaign?.referrerMode || "auto"} 
+                           className="w-full p-3 bg-white rounded-xl border outline-none text-sm"
+                         >
+                           <option value="auto">🤖 Auto (Weighted by Market Share)</option>
+                           <option value="rotation">📊 Custom Rotation (Set Percentages)</option>
+                           <option value="single">🎯 Single Source (Select Below)</option>
+                         </select>
+                       </div>
+                       
+                       {/* Single Source Selection */}
+                       <div className="space-y-2" id="referrerSingleSection">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Select Referrer Source</label>
+                         <select 
+                           name="referrerSourceId" 
+                           defaultValue={editingCampaign?.referrerSourceId || ""} 
+                           className="w-full p-3 bg-white rounded-xl border outline-none text-sm"
+                         >
+                           <option value="">-- Select a Source --</option>
+                           <optgroup label="🔍 Search Engines">
+                             <option value="google_organic">Google Search (Organic) - 65%</option>
+                             <option value="google_ads">Google Ads (Paid) - 5%</option>
+                             <option value="bing">Bing Search - 8%</option>
+                             <option value="yahoo">Yahoo Search - 3%</option>
+                             <option value="duckduckgo">DuckDuckGo - 2%</option>
+                             <option value="baidu">Baidu Search - 5%</option>
+                             <option value="yandex">Yandex Search - 2%</option>
+                           </optgroup>
+                           <optgroup label="📱 Social Media">
+                             <option value="facebook">Facebook - 12%</option>
+                             <option value="twitter">X (Twitter) - 6%</option>
+                             <option value="linkedin">LinkedIn - 4%</option>
+                             <option value="reddit">Reddit - 3%</option>
+                             <option value="instagram">Instagram - 5%</option>
+                             <option value="tiktok">TikTok - 4%</option>
+                             <option value="youtube">YouTube - 5%</option>
+                             <option value="whatsapp">WhatsApp - 3%</option>
+                             <option value="telegram">Telegram - 2%</option>
+                             <option value="discord">Discord - 1%</option>
+                             <option value="quora">Quora - 1%</option>
+                             <option value="pinterest">Pinterest - 2%</option>
+                           </optgroup>
+                           <optgroup label="✉️ Email">
+                             <option value="gmail">Gmail - 3%</option>
+                             <option value="outlook">Outlook - 2%</option>
+                             <option value="newsletter">Newsletter - 2%</option>
+                           </optgroup>
+                           <optgroup label="🤖 AI Search">
+                             <option value="chatgpt">ChatGPT - 2%</option>
+                             <option value="perplexity">Perplexity AI - 1%</option>
+                             <option value="claude">Claude AI - 1%</option>
+                             <option value="gemini">Google Gemini - 1%</option>
+                             <option value="copilot">Microsoft Copilot - 1%</option>
+                           </optgroup>
+                           <optgroup label="🔗 Direct">
+                             <option value="direct">Direct (No Referrer) - 20%</option>
+                             <option value="bookmark">Bookmark - 5%</option>
+                             <option value="typed_url">Typed URL - 5%</option>
+                           </optgroup>
+                         </select>
+                       </div>
+                       
+                       {/* Custom Referrer URL */}
+                       <div className="space-y-2">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Custom Referrer URL (Optional)</label>
+                         <input 
+                           type="text" 
+                           name="customReferrerUrl" 
+                           defaultValue={editingCampaign?.customReferrerUrl || ""} 
+                           placeholder="https://example.com/referrer-page"
+                           className="w-full p-3 bg-white rounded-xl border outline-none text-sm"
+                         />
+                       </div>
+                     </div>
+                     
+                     {/* Rotation Percentages */}
+                     <div className="p-4 bg-slate-50 rounded-xl space-y-3" id="referrerRotationSection">
+                       <label className="text-[11px] font-bold text-slate-500 uppercase">Referrer Rotation Percentages</label>
+                       <div className="grid grid-cols-4 gap-2">
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-blue-600">Google %</label>
+                           <input type="number" name="referrerGooglePercent" defaultValue={editingCampaign?.referrerGooglePercent ?? 45} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-blue-600">Bing %</label>
+                           <input type="number" name="referrerBingPercent" defaultValue={editingCampaign?.referrerBingPercent ?? 8} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-blue-600">Yahoo %</label>
+                           <input type="number" name="referrerYahooPercent" defaultValue={editingCampaign?.referrerYahooPercent ?? 2} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-blue-600">DuckDuckGo %</label>
+                           <input type="number" name="referrerDuckduckgoPercent" defaultValue={editingCampaign?.referrerDuckduckgoPercent ?? 2} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-indigo-600">Facebook %</label>
+                           <input type="number" name="referrerFacebookPercent" defaultValue={editingCampaign?.referrerFacebookPercent ?? 15} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-indigo-600">Twitter/X %</label>
+                           <input type="number" name="referrerTwitterPercent" defaultValue={editingCampaign?.referrerTwitterPercent ?? 5} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-indigo-600">LinkedIn %</label>
+                           <input type="number" name="referrerLinkedinPercent" defaultValue={editingCampaign?.referrerLinkedinPercent ?? 3} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-indigo-600">Reddit %</label>
+                           <input type="number" name="referrerRedditPercent" defaultValue={editingCampaign?.referrerRedditPercent ?? 2} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-pink-600">Instagram %</label>
+                           <input type="number" name="referrerInstagramPercent" defaultValue={editingCampaign?.referrerInstagramPercent ?? 5} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-600">TikTok %</label>
+                           <input type="number" name="referrerTiktokPercent" defaultValue={editingCampaign?.referrerTiktokPercent ?? 3} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-red-600">YouTube %</label>
+                           <input type="number" name="referrerYoutubePercent" defaultValue={editingCampaign?.referrerYoutubePercent ?? 3} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-600">Direct %</label>
+                           <input type="number" name="referrerDirectPercent" defaultValue={editingCampaign?.referrerDirectPercent ?? 7} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                       </div>
+                       <p className="text-[9px] text-slate-500">💡 Percentages should total ~100% for balanced distribution</p>
+                     </div>
+                     
+                     {/* UTM Parameters */}
+                     <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                       <label className="text-[11px] font-bold text-slate-500 uppercase">UTM Parameters (Optional)</label>
+                       <div className="grid grid-cols-2 gap-3">
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">utm_source</label>
+                           <input type="text" name="utmSource" defaultValue={editingCampaign?.utmSource || ""} placeholder="google, facebook, etc." className="w-full p-2 bg-white rounded-lg border outline-none text-xs" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">utm_medium</label>
+                           <input type="text" name="utmMedium" defaultValue={editingCampaign?.utmMedium || ""} placeholder="organic, cpc, social, etc." className="w-full p-2 bg-white rounded-lg border outline-none text-xs" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">utm_campaign</label>
+                           <input type="text" name="utmCampaign" defaultValue={editingCampaign?.utmCampaign || ""} placeholder="campaign_name" className="w-full p-2 bg-white rounded-lg border outline-none text-xs" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">utm_term</label>
+                           <input type="text" name="utmTerm" defaultValue={editingCampaign?.utmTerm || ""} placeholder="keyword" className="w-full p-2 bg-white rounded-lg border outline-none text-xs" />
+                         </div>
+                       </div>
+                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer mt-2">
+                         <input type="checkbox" name="injectKeywordInReferrer" defaultChecked={editingCampaign?.injectKeywordInReferrer !== false} className="w-4 h-4" /> 
+                         Inject Keywords in Referrer URLs
+                       </label>
+                     </div>
+                  </div>
+                  
                   {/* Schedule Campaign Section */}
                   <div className="space-y-4">
                      <h4 className="text-xs font-bold text-purple-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
                        <Calendar size={14} />
-                       5. Campaign Schedule (Optional)
+                       6. Campaign Schedule (Optional)
                      </h4>
                      
                      {/* START Schedule */}
