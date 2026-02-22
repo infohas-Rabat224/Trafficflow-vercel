@@ -75,7 +75,7 @@ const initializeFirebase = () => {
 
 const appId = typeof window !== 'undefined' && (window as any).__app_id 
   ? (window as any).__app_id 
-  : 'traffic-flow-v31-0-enterprise';
+  : 'traffic-flow-v32-0-enterprise';
 
 // --- PHASE 1: PERSISTENCE & UI UTILITIES ---
 
@@ -1537,6 +1537,318 @@ const HumanBehaviorSimulator = {
       });
     }
     return points;
+  }
+};
+
+// ============================================================
+// BEHAVIOR PATTERN SIMULATION CONFIGURATION (v32.0)
+// Comprehensive user behavior simulation for organic traffic
+// ============================================================
+
+interface BehaviorPatternConfig {
+  // Scroll Behavior
+  scrollDepthMode: 'auto' | 'custom' | 'fixed';
+  scrollDepthFixed?: number; // Fixed percentage (0-100)
+  scrollDepthDistribution?: { [key: string]: number }; // { '25': 20, '50': 30, '75': 30, '100': 20 }
+  scrollSpeedPreference?: 'slow' | 'medium' | 'fast' | 'random';
+  scrollPauseEnabled?: boolean;
+  scrollPauseMin?: number;
+  scrollPauseMax?: number;
+  
+  // Click Simulation
+  clickSimulationEnabled?: boolean;
+  clickTargets?: ('internal_links' | 'ctas' | 'navigation' | 'images' | 'buttons')[];
+  clickFrequency?: number; // Clicks per page (0-10)
+  clickDelayMin?: number; // Minimum delay before click (ms)
+  clickDelayMax?: number; // Maximum delay before click (ms)
+  
+  // Time on Page
+  timeOnPageMode: 'auto' | 'custom' | 'range';
+  timeOnPageMin?: number; // Minimum seconds
+  timeOnPageMax?: number; // Maximum seconds
+  timeOnPageDistribution?: 'uniform' | 'normal' | 'exponential';
+  
+  // Bounce Rate Control
+  bounceRateEnabled?: boolean;
+  bounceRatePercent?: number; // 0-100%
+  bounceBehavior?: 'immediate' | 'quick_scan' | 'error_page';
+  
+  // Pages Per Session
+  pagesPerSessionMode: 'auto' | 'custom' | 'fixed';
+  pagesPerSessionFixed?: number;
+  pagesPerSessionDistribution?: { [key: number]: number }; // { 1: 10, 2: 25, 3: 30, 4: 20, 5: 15 }
+  
+  // Return Visitor Simulation
+  returnVisitorEnabled?: boolean;
+  returnVisitorPercent?: number; // 0-100%
+  returnVisitorSessionGap?: number; // Hours between visits
+  
+  // Engagement Quality
+  engagementLevel?: 'passive' | 'normal' | 'active' | 'highly_active';
+  readingBehavior?: 'skimmer' | 'normal' | 'thorough';
+  interactionIntensity?: number; // 0-100 scale
+}
+
+// Default behavior patterns based on engagement level
+const DefaultBehaviorPatterns: { [key: string]: Partial<BehaviorPatternConfig> } = {
+  passive: {
+    scrollDepthMode: 'auto',
+    scrollSpeedPreference: 'fast',
+    timeOnPageMode: 'auto',
+    timeOnPageMin: 15,
+    timeOnPageMax: 45,
+    bounceRateEnabled: true,
+    bounceRatePercent: 50,
+    pagesPerSessionMode: 'auto',
+    engagementLevel: 'passive',
+    readingBehavior: 'skimmer',
+    interactionIntensity: 20
+  },
+  normal: {
+    scrollDepthMode: 'auto',
+    scrollSpeedPreference: 'medium',
+    timeOnPageMode: 'auto',
+    timeOnPageMin: 30,
+    timeOnPageMax: 120,
+    bounceRateEnabled: true,
+    bounceRatePercent: 25,
+    pagesPerSessionMode: 'auto',
+    engagementLevel: 'normal',
+    readingBehavior: 'normal',
+    interactionIntensity: 50
+  },
+  active: {
+    scrollDepthMode: 'auto',
+    scrollSpeedPreference: 'slow',
+    timeOnPageMode: 'auto',
+    timeOnPageMin: 60,
+    timeOnPageMax: 180,
+    bounceRateEnabled: true,
+    bounceRatePercent: 10,
+    pagesPerSessionMode: 'auto',
+    engagementLevel: 'active',
+    readingBehavior: 'thorough',
+    interactionIntensity: 75
+  },
+  highly_active: {
+    scrollDepthMode: 'fixed',
+    scrollDepthFixed: 100,
+    scrollSpeedPreference: 'slow',
+    timeOnPageMode: 'auto',
+    timeOnPageMin: 120,
+    timeOnPageMax: 300,
+    bounceRateEnabled: true,
+    bounceRatePercent: 5,
+    pagesPerSessionMode: 'auto',
+    engagementLevel: 'highly_active',
+    readingBehavior: 'thorough',
+    interactionIntensity: 95
+  }
+};
+
+// Enhanced Behavior Pattern Simulator
+const BehaviorPatternSimulator = {
+  // Generate scroll depths based on configuration
+  getScrollDepths: (config?: Partial<BehaviorPatternConfig>): number[] => {
+    if (!config || config.scrollDepthMode === 'auto') {
+      // Use existing logic
+      return HumanBehaviorSimulator.getScrollDepths();
+    }
+    
+    if (config.scrollDepthMode === 'fixed' && config.scrollDepthFixed) {
+      return [config.scrollDepthFixed];
+    }
+    
+    if (config.scrollDepthMode === 'custom' && config.scrollDepthDistribution) {
+      // Weighted random selection based on distribution
+      const depths: number[] = [];
+      const distribution = config.scrollDepthDistribution;
+      const totalWeight = Object.values(distribution).reduce((a, b) => a + b, 0);
+      let rand = Math.random() * totalWeight;
+      
+      for (const [depth, weight] of Object.entries(distribution)) {
+        rand -= weight;
+        if (rand <= 0) {
+          depths.push(parseInt(depth));
+          break;
+        }
+      }
+      return depths;
+    }
+    
+    return HumanBehaviorSimulator.getScrollDepths();
+  },
+  
+  // Get scroll speed based on preference
+  getScrollSpeed: (config?: Partial<BehaviorPatternConfig>): 'slow' | 'medium' | 'fast' => {
+    if (!config?.scrollSpeedPreference || config.scrollSpeedPreference === 'random') {
+      return HumanBehaviorSimulator.getScrollSpeed();
+    }
+    return config.scrollSpeedPreference;
+  },
+  
+  // Generate scroll pauses
+  getScrollPauses: (config?: Partial<BehaviorPatternConfig>): number[] => {
+    if (config?.scrollPauseEnabled === false) {
+      return [];
+    }
+    
+    const numPauses = Math.floor(Math.random() * 4) + 1;
+    const pauses: number[] = [];
+    const minPause = config?.scrollPauseMin ?? 500;
+    const maxPause = config?.scrollPauseMax ?? 2500;
+    
+    for (let i = 0; i < numPauses; i++) {
+      pauses.push(minPause + Math.floor(Math.random() * (maxPause - minPause)));
+    }
+    return pauses;
+  },
+  
+  // Generate click targets for simulation
+  getClickTargets: (config?: Partial<BehaviorPatternConfig>): string[] => {
+    if (!config?.clickSimulationEnabled) {
+      return [];
+    }
+    
+    const targets = config.clickTargets || ['internal_links'];
+    const frequency = config.clickFrequency ?? 1;
+    const selectedTargets: string[] = [];
+    
+    for (let i = 0; i < Math.min(frequency, targets.length); i++) {
+      const randomTarget = targets[Math.floor(Math.random() * targets.length)];
+      if (!selectedTargets.includes(randomTarget)) {
+        selectedTargets.push(randomTarget);
+      }
+    }
+    
+    return selectedTargets;
+  },
+  
+  // Get click delay
+  getClickDelay: (config?: Partial<BehaviorPatternConfig>): number => {
+    const minDelay = config?.clickDelayMin ?? 500;
+    const maxDelay = config?.clickDelayMax ?? 3000;
+    return minDelay + Math.floor(Math.random() * (maxDelay - minDelay));
+  },
+  
+  // Generate time on page
+  getTimeOnPage: (config?: Partial<BehaviorPatternConfig>, contentLength?: 'short' | 'medium' | 'long'): number => {
+    if (!config || config.timeOnPageMode === 'auto') {
+      return HumanBehaviorSimulator.getTimeOnPage(contentLength || 'medium');
+    }
+    
+    if (config.timeOnPageMode === 'range' || config.timeOnPageMode === 'custom') {
+      const min = (config.timeOnPageMin ?? 30) * 1000;
+      const max = (config.timeOnPageMax ?? 120) * 1000;
+      
+      if (config.timeOnPageDistribution === 'normal') {
+        // Normal distribution centered between min and max
+        const mean = (min + max) / 2;
+        const stdDev = (max - min) / 4;
+        const u1 = Math.random();
+        const u2 = Math.random();
+        const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        return Math.max(min, Math.min(max, Math.floor(mean + z * stdDev)));
+      } else if (config.timeOnPageDistribution === 'exponential') {
+        // Exponential distribution favoring lower values
+        const factor = -Math.log(1 - Math.random());
+        return Math.floor(min + (max - min) * (1 - Math.exp(-factor)));
+      } else {
+        // Uniform distribution
+        return min + Math.floor(Math.random() * (max - min));
+      }
+    }
+    
+    return HumanBehaviorSimulator.getTimeOnPage(contentLength || 'medium');
+  },
+  
+  // Determine if session should bounce
+  shouldBounce: (config?: Partial<BehaviorPatternConfig>): boolean => {
+    if (!config?.bounceRateEnabled) {
+      // Use default from getPagesPerSession
+      return Math.random() < 0.10;
+    }
+    
+    return Math.random() < ((config.bounceRatePercent ?? 25) / 100);
+  },
+  
+  // Get bounce behavior
+  getBounceBehavior: (config?: Partial<BehaviorPatternConfig>): 'immediate' | 'quick_scan' | 'error_page' => {
+    return config?.bounceBehavior || 'quick_scan';
+  },
+  
+  // Generate pages per session
+  getPagesPerSession: (config?: Partial<BehaviorPatternConfig>): number => {
+    if (!config || config.pagesPerSessionMode === 'auto') {
+      return HumanBehaviorSimulator.getPagesPerSession();
+    }
+    
+    if (config.pagesPerSessionMode === 'fixed' && config.pagesPerSessionFixed) {
+      return config.pagesPerSessionFixed;
+    }
+    
+    if (config.pagesPerSessionMode === 'custom' && config.pagesPerSessionDistribution) {
+      const distribution = config.pagesPerSessionDistribution;
+      const totalWeight = Object.values(distribution).reduce((a, b) => a + b, 0);
+      let rand = Math.random() * totalWeight;
+      
+      for (const [pages, weight] of Object.entries(distribution)) {
+        rand -= weight;
+        if (rand <= 0) {
+          return parseInt(pages);
+        }
+      }
+    }
+    
+    return HumanBehaviorSimulator.getPagesPerSession();
+  },
+  
+  // Determine if visitor is returning
+  isReturningVisitor: (config?: Partial<BehaviorPatternConfig>): boolean => {
+    if (!config?.returnVisitorEnabled) {
+      return Math.random() < 0.25; // Default 25% returning visitors
+    }
+    
+    return Math.random() < ((config.returnVisitorPercent ?? 30) / 100);
+  },
+  
+  // Get session gap for returning visitors (in hours)
+  getReturnSessionGap: (config?: Partial<BehaviorPatternConfig>): number => {
+    const baseGap = config?.returnVisitorSessionGap ?? 24;
+    // Add variation: 50% to 200% of base gap
+    const variation = 0.5 + Math.random() * 1.5;
+    return Math.floor(baseGap * variation);
+  },
+  
+  // Get complete behavior profile for a session
+  generateBehaviorProfile: (config?: Partial<BehaviorPatternConfig>) => {
+    const engagementLevel = config?.engagementLevel || 'normal';
+    const mergedConfig = { ...DefaultBehaviorPatterns[engagementLevel], ...config };
+    
+    return {
+      scrollDepths: BehaviorPatternSimulator.getScrollDepths(mergedConfig),
+      scrollSpeed: BehaviorPatternSimulator.getScrollSpeed(mergedConfig),
+      scrollPauses: BehaviorPatternSimulator.getScrollPauses(mergedConfig),
+      clickTargets: BehaviorPatternSimulator.getClickTargets(mergedConfig),
+      clickDelay: BehaviorPatternSimulator.getClickDelay(mergedConfig),
+      timeOnPage: BehaviorPatternSimulator.getTimeOnPage(mergedConfig),
+      shouldBounce: BehaviorPatternSimulator.shouldBounce(mergedConfig),
+      bounceBehavior: BehaviorPatternSimulator.getBounceBehavior(mergedConfig),
+      pagesPerSession: BehaviorPatternSimulator.getPagesPerSession(mergedConfig),
+      isReturning: BehaviorPatternSimulator.isReturningVisitor(mergedConfig),
+      returnSessionGap: BehaviorPatternSimulator.getReturnSessionGap(mergedConfig),
+      readingZones: HumanBehaviorSimulator.getReadingZones(),
+      mouseTrajectory: HumanBehaviorSimulator.getMouseTrajectory(0, 0, 100, 100),
+      reactionTime: HumanBehaviorSimulator.getReactionTime(),
+      engagementLevel: mergedConfig.engagementLevel,
+      readingBehavior: mergedConfig.readingBehavior,
+      interactionIntensity: mergedConfig.interactionIntensity
+    };
+  },
+  
+  // Get default config for engagement level
+  getDefaultConfig: (level: 'passive' | 'normal' | 'active' | 'highly_active'): Partial<BehaviorPatternConfig> => {
+    return DefaultBehaviorPatterns[level] || DefaultBehaviorPatterns.normal;
   }
 };
 
@@ -10536,6 +10848,43 @@ interface Campaign {
   // Referrer category filter (for auto mode)
   referrerCategories?: ('search' | 'social' | 'direct' | 'email' | 'ai')[];
   
+  // ========== Behavior Pattern Simulation Configuration (v32.0) ==========
+  // Engagement Level Preset
+  engagementLevel?: 'passive' | 'normal' | 'active' | 'highly_active';
+  readingBehavior?: 'skimmer' | 'normal' | 'thorough';
+  interactionIntensity?: number; // 0-100 scale
+  
+  // Scroll Behavior
+  scrollDepthMode?: 'auto' | 'custom' | 'fixed';
+  scrollDepthFixed?: number; // Fixed percentage (0-100)
+  scrollSpeedPreference?: 'slow' | 'medium' | 'fast' | 'random';
+  scrollPauseEnabled?: boolean;
+  
+  // Click Simulation
+  clickSimulationEnabled?: boolean;
+  clickTargets?: ('internal_links' | 'ctas' | 'navigation' | 'images' | 'buttons')[];
+  clickFrequency?: number; // Clicks per page (0-10)
+  
+  // Time on Page
+  timeOnPageMode?: 'auto' | 'custom' | 'range';
+  timeOnPageMin?: number; // Minimum seconds
+  timeOnPageMax?: number; // Maximum seconds
+  timeOnPageDistribution?: 'uniform' | 'normal' | 'exponential';
+  
+  // Bounce Rate Control
+  bounceRateControlEnabled?: boolean;
+  bounceRatePercent?: number; // 0-100%
+  bounceBehavior?: 'immediate' | 'quick_scan' | 'error_page';
+  
+  // Pages Per Session
+  pagesPerSessionMode?: 'auto' | 'custom' | 'fixed';
+  pagesPerSessionFixed?: number;
+  
+  // Return Visitor Simulation
+  returnVisitorSimEnabled?: boolean;
+  returnVisitorPercent?: number; // 0-100%
+  returnVisitorSessionGap?: number; // Hours between visits
+  
   stats: {
     hits: number;
   };
@@ -13306,7 +13655,7 @@ const MainContent = () => {
        }));
        
        // ============================================================
-       // ENHANCED: HUMAN BEHAVIOR PARAMETERS
+       // ENHANCED: HUMAN BEHAVIOR PARAMETERS (v32.0)
        // ============================================================
        
        // Determine content length based on URL pattern
@@ -13314,10 +13663,53 @@ const MainContent = () => {
            url.includes('/blog') || url.includes('/article') ? 'long' :
            url.includes('/product') || url.includes('/service') ? 'medium' : 'short';
        
-       const sessionLength = HumanBehaviorSimulator.getTimeOnPage(contentLength) * weekendFactor.sessionLength;
-       const pagesPerSession = HumanBehaviorSimulator.getPagesPerSession();
-       const scrollDepths = HumanBehaviorSimulator.getScrollDepths();
-       const maxScrollDepth = Math.max(...scrollDepths);
+       // Check if campaign has behavior pattern configuration (v32.0)
+       let sessionLength: number;
+       let pagesPerSession: number;
+       let scrollDepths: number[];
+       let maxScrollDepth: number;
+       let shouldBounce: boolean;
+       
+       if (job.engagementLevel || job.scrollDepthMode) {
+         // Use new Behavior Pattern Simulator (v32.0)
+         const behaviorConfig: Partial<BehaviorPatternConfig> = {
+           engagementLevel: job.engagementLevel,
+           readingBehavior: job.readingBehavior,
+           interactionIntensity: job.interactionIntensity,
+           scrollDepthMode: job.scrollDepthMode,
+           scrollDepthFixed: job.scrollDepthFixed,
+           scrollSpeedPreference: job.scrollSpeedPreference,
+           scrollPauseEnabled: job.scrollPauseEnabled,
+           clickSimulationEnabled: job.clickSimulationEnabled,
+           clickTargets: job.clickTargets,
+           clickFrequency: job.clickFrequency,
+           timeOnPageMode: job.timeOnPageMode,
+           timeOnPageMin: job.timeOnPageMin,
+           timeOnPageMax: job.timeOnPageMax,
+           timeOnPageDistribution: job.timeOnPageDistribution,
+           bounceRateEnabled: job.bounceRateControlEnabled,
+           bounceRatePercent: job.bounceRatePercent,
+           bounceBehavior: job.bounceBehavior,
+           pagesPerSessionMode: job.pagesPerSessionMode,
+           pagesPerSessionFixed: job.pagesPerSessionFixed,
+           returnVisitorEnabled: job.returnVisitorSimEnabled,
+           returnVisitorPercent: job.returnVisitorPercent,
+           returnVisitorSessionGap: job.returnVisitorSessionGap
+         };
+         
+         sessionLength = BehaviorPatternSimulator.getTimeOnPage(behaviorConfig, contentLength) * weekendFactor.sessionLength;
+         pagesPerSession = BehaviorPatternSimulator.getPagesPerSession(behaviorConfig);
+         scrollDepths = BehaviorPatternSimulator.getScrollDepths(behaviorConfig);
+         maxScrollDepth = scrollDepths.length > 0 ? Math.max(...scrollDepths) : 50;
+         shouldBounce = BehaviorPatternSimulator.shouldBounce(behaviorConfig);
+       } else {
+         // Legacy behavior (backward compatible)
+         sessionLength = HumanBehaviorSimulator.getTimeOnPage(contentLength) * weekendFactor.sessionLength;
+         pagesPerSession = HumanBehaviorSimulator.getPagesPerSession();
+         scrollDepths = HumanBehaviorSimulator.getScrollDepths();
+         maxScrollDepth = Math.max(...scrollDepths);
+         shouldBounce = false;
+       }
        
        // ============================================================
        // ENHANCED: CORE WEB VITALS
@@ -14430,6 +14822,30 @@ Report generated for: ${domain}
       utmTerm: formData.get('utmTerm') as string || undefined,
       injectKeywordInReferrer: formData.get('injectKeywordInReferrer') === 'on',
       
+      // ========== Behavior Pattern Simulation Configuration (v32.0) ==========
+      engagementLevel: (formData.get('engagementLevel') as 'passive' | 'normal' | 'active' | 'highly_active') || 'normal',
+      readingBehavior: (formData.get('readingBehavior') as 'skimmer' | 'normal' | 'thorough') || 'normal',
+      interactionIntensity: parseInt(formData.get('interactionIntensity') as string) || 50,
+      scrollDepthMode: (formData.get('scrollDepthMode') as 'auto' | 'custom' | 'fixed') || 'auto',
+      scrollDepthFixed: parseInt(formData.get('scrollDepthFixed') as string) || undefined,
+      scrollSpeedPreference: (formData.get('scrollSpeedPreference') as 'slow' | 'medium' | 'fast' | 'random') || 'random',
+      scrollPauseEnabled: formData.get('scrollPauseEnabled') === 'on',
+      clickSimulationEnabled: formData.get('clickSimulationEnabled') === 'on',
+      clickTargets: [formData.get('clickTargetsSelect') as 'internal_links' | 'ctas' | 'navigation' | 'images' | 'buttons'] || ['internal_links'],
+      clickFrequency: parseInt(formData.get('clickFrequency') as string) || 2,
+      timeOnPageMode: (formData.get('timeOnPageMode') as 'auto' | 'custom' | 'range') || 'auto',
+      timeOnPageMin: parseInt(formData.get('timeOnPageMin') as string) || 30,
+      timeOnPageMax: parseInt(formData.get('timeOnPageMax') as string) || 180,
+      timeOnPageDistribution: (formData.get('timeOnPageDistribution') as 'uniform' | 'normal' | 'exponential') || 'exponential',
+      bounceRateControlEnabled: formData.get('bounceRateControlEnabled') === 'on',
+      bounceRatePercent: parseInt(formData.get('bounceRatePercent') as string) || 25,
+      bounceBehavior: (formData.get('bounceBehavior') as 'immediate' | 'quick_scan' | 'error_page') || 'quick_scan',
+      pagesPerSessionMode: (formData.get('pagesPerSessionMode') as 'auto' | 'custom' | 'fixed') || 'auto',
+      pagesPerSessionFixed: parseInt(formData.get('pagesPerSessionFixed') as string) || undefined,
+      returnVisitorSimEnabled: formData.get('returnVisitorSimEnabled') === 'on',
+      returnVisitorPercent: parseInt(formData.get('returnVisitorPercent') as string) || 30,
+      returnVisitorSessionGap: parseInt(formData.get('returnVisitorSessionGap') as string) || 24,
+      
       // START Scheduling fields
       scheduledEnabled,
       scheduledDate: scheduledEnabled ? scheduledDate : undefined,
@@ -14715,7 +15131,7 @@ End of Report
               <h1 className="text-2xl font-black text-white">TrafficFlow</h1>
               <p className="text-xs text-slate-300">Enterprise SEO Traffic Management</p>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v31.0 Enterprise</span>
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-400/20 px-2 py-0.5 rounded-full">v32.0 Enterprise</span>
           </div>
           
           {loginError && (
@@ -14767,7 +15183,7 @@ End of Report
     <div className="h-screen flex bg-slate-50 dark:bg-slate-900 font-sans text-sm overflow-hidden text-slate-800 dark:text-slate-200">
       <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl">
         <div className="p-6 pb-2">
-          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v31.0 Ent</span></div></div>
+          <div className="flex items-center gap-3 mb-4"><CustomIcons.Logo /><div><h1 className="font-black text-lg">TrafficFlow</h1><span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">v32.0 Ent</span></div></div>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
@@ -16622,7 +17038,7 @@ End of Report
                           const report = `
 ================================================================================
                         TECHNICAL SEO AUDIT REPORT
-                        TrafficFlow Enterprise v31.0
+                        TrafficFlow Enterprise v32.0
 ================================================================================
 
 Generated: ${reportDate} at ${reportTime}
@@ -16803,7 +17219,7 @@ ${siteAuditResults.issues.filter(i => i.severity === 'info').map(i => `□ Revie
 ================================================================================
                             END OF REPORT
 ================================================================================
-Report generated by TrafficFlow Enterprise v31.0
+Report generated by TrafficFlow Enterprise v32.0
 Audited Domain: ${domain}
 For support: support@trafficflow.enterprise
 `;
@@ -17789,7 +18205,7 @@ For support: support@trafficflow.enterprise
                         const report = `
 ================================================================================
                         BACKLINK AUTHORITY REPORT
-                        TrafficFlow Enterprise v31.0
+                        TrafficFlow Enterprise v32.0
 ================================================================================
 
 Generated: ${new Date().toLocaleString()}
@@ -24947,11 +25363,199 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                      </div>
                   </div>
                   
+                  {/* Behavior Pattern Simulation Section */}
+                  <div className="space-y-4">
+                     <h4 className="text-xs font-bold text-cyan-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
+                       <MousePointer2 size={14} />
+                       5. Behavior Pattern Simulation (v32.0)
+                     </h4>
+                     
+                     {/* Engagement Level Preset */}
+                     <div className="p-4 bg-cyan-50 border border-cyan-100 rounded-xl space-y-4">
+                       <div className="space-y-2">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Engagement Level Preset</label>
+                         <div className="grid grid-cols-4 gap-2">
+                           {['passive', 'normal', 'active', 'highly_active'].map(level => (
+                             <label key={level} className="flex items-center justify-center gap-1 p-2 bg-white border rounded-lg cursor-pointer hover:bg-cyan-50">
+                               <input type="radio" name="engagementLevel" value={level} defaultChecked={editingCampaign?.engagementLevel === level || (!editingCampaign?.engagementLevel && level === 'normal')} className="text-cyan-600" />
+                               <span className="text-[10px] font-bold text-slate-600 capitalize">{level.replace('_', ' ')}</span>
+                             </label>
+                           ))}
+                         </div>
+                         <p className="text-[9px] text-slate-500">💡 Presets auto-configure scroll, time, bounce, and pages settings</p>
+                       </div>
+                       
+                       <div className="grid grid-cols-2 gap-3">
+                         <div className="space-y-2">
+                           <label className="text-[10px] font-bold text-slate-500 uppercase">Reading Behavior</label>
+                           <select name="readingBehavior" defaultValue={editingCampaign?.readingBehavior || "normal"} className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="skimmer">📖 Skimmer (Quick Scan)</option>
+                             <option value="normal">📚 Normal Reader</option>
+                             <option value="thorough">🔍 Thorough Reader</option>
+                           </select>
+                         </div>
+                         <div className="space-y-2">
+                           <label className="text-[10px] font-bold text-slate-500 uppercase">Interaction Intensity</label>
+                           <input type="number" name="interactionIntensity" defaultValue={editingCampaign?.interactionIntensity ?? 50} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                       </div>
+                     </div>
+                     
+                     {/* Scroll Behavior */}
+                     <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                       <label className="text-[11px] font-bold text-slate-500 uppercase">Scroll Behavior</label>
+                       <div className="grid grid-cols-3 gap-3">
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Depth Mode</label>
+                           <select name="scrollDepthMode" defaultValue={editingCampaign?.scrollDepthMode || "auto"} className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="auto">Auto</option>
+                             <option value="custom">Custom</option>
+                             <option value="fixed">Fixed</option>
+                           </select>
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Fixed Depth %</label>
+                           <input type="number" name="scrollDepthFixed" defaultValue={editingCampaign?.scrollDepthFixed ?? 75} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Scroll Speed</label>
+                           <select name="scrollSpeedPreference" defaultValue={editingCampaign?.scrollSpeedPreference || "random"} className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="random">🎲 Random</option>
+                             <option value="slow">🐢 Slow</option>
+                             <option value="medium">🚶 Medium</option>
+                             <option value="fast">🏃 Fast</option>
+                           </select>
+                         </div>
+                       </div>
+                       <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                         <input type="checkbox" name="scrollPauseEnabled" defaultChecked={editingCampaign?.scrollPauseEnabled !== false} className="w-4 h-4" /> 
+                         Enable Scroll Pauses (Natural Reading)
+                       </label>
+                     </div>
+                     
+                     {/* Click Simulation */}
+                     <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                       <div className="flex items-center justify-between">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Click Simulation</label>
+                         <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                           <input type="checkbox" name="clickSimulationEnabled" defaultChecked={editingCampaign?.clickSimulationEnabled} className="w-4 h-4" /> 
+                           Enable
+                         </label>
+                       </div>
+                       <div className="grid grid-cols-2 gap-3">
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Click Targets</label>
+                           <select name="clickTargetsSelect" defaultValue="internal_links" className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="internal_links">Internal Links</option>
+                             <option value="ctas">CTAs</option>
+                             <option value="navigation">Navigation</option>
+                             <option value="images">Images</option>
+                             <option value="buttons">Buttons</option>
+                           </select>
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Clicks Per Page</label>
+                           <input type="number" name="clickFrequency" defaultValue={editingCampaign?.clickFrequency ?? 2} min="0" max="10" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                       </div>
+                     </div>
+                     
+                     {/* Time on Page */}
+                     <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                       <label className="text-[11px] font-bold text-slate-500 uppercase">Time on Page</label>
+                       <div className="grid grid-cols-4 gap-3">
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Mode</label>
+                           <select name="timeOnPageMode" defaultValue={editingCampaign?.timeOnPageMode || "auto"} className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="auto">Auto</option>
+                             <option value="range">Range</option>
+                             <option value="custom">Custom</option>
+                           </select>
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Min (sec)</label>
+                           <input type="number" name="timeOnPageMin" defaultValue={editingCampaign?.timeOnPageMin ?? 30} min="5" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Max (sec)</label>
+                           <input type="number" name="timeOnPageMax" defaultValue={editingCampaign?.timeOnPageMax ?? 180} min="10" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Distribution</label>
+                           <select name="timeOnPageDistribution" defaultValue={editingCampaign?.timeOnPageDistribution || "exponential"} className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="uniform">Uniform</option>
+                             <option value="normal">Normal</option>
+                             <option value="exponential">Exponential</option>
+                           </select>
+                         </div>
+                       </div>
+                     </div>
+                     
+                     {/* Bounce Rate & Pages Per Session */}
+                     <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl">
+                       <div className="space-y-3">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Bounce Rate Control</label>
+                         <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                           <input type="checkbox" name="bounceRateControlEnabled" defaultChecked={editingCampaign?.bounceRateControlEnabled !== false} className="w-4 h-4" /> 
+                           Enable Control
+                         </label>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Bounce Rate %</label>
+                           <input type="number" name="bounceRatePercent" defaultValue={editingCampaign?.bounceRatePercent ?? 25} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Bounce Behavior</label>
+                           <select name="bounceBehavior" defaultValue={editingCampaign?.bounceBehavior || "quick_scan"} className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="immediate">Immediate Exit</option>
+                             <option value="quick_scan">Quick Scan</option>
+                             <option value="error_page">Error Page</option>
+                           </select>
+                         </div>
+                       </div>
+                       <div className="space-y-3">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Pages Per Session</label>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Mode</label>
+                           <select name="pagesPerSessionMode" defaultValue={editingCampaign?.pagesPerSessionMode || "auto"} className="w-full p-2 bg-white rounded-lg border outline-none text-xs">
+                             <option value="auto">Auto (Optimized)</option>
+                             <option value="fixed">Fixed</option>
+                             <option value="custom">Custom</option>
+                           </select>
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Fixed Pages</label>
+                           <input type="number" name="pagesPerSessionFixed" defaultValue={editingCampaign?.pagesPerSessionFixed ?? 3} min="1" max="20" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                       </div>
+                     </div>
+                     
+                     {/* Return Visitor Simulation */}
+                     <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                       <div className="flex items-center justify-between">
+                         <label className="text-[11px] font-bold text-slate-500 uppercase">Return Visitor Simulation</label>
+                         <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                           <input type="checkbox" name="returnVisitorSimEnabled" defaultChecked={editingCampaign?.returnVisitorSimEnabled !== false} className="w-4 h-4" /> 
+                           Enable
+                         </label>
+                       </div>
+                       <div className="grid grid-cols-2 gap-3">
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Return Visitor %</label>
+                           <input type="number" name="returnVisitorPercent" defaultValue={editingCampaign?.returnVisitorPercent ?? 30} min="0" max="100" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="text-[9px] font-bold text-slate-400">Session Gap (hours)</label>
+                           <input type="number" name="returnVisitorSessionGap" defaultValue={editingCampaign?.returnVisitorSessionGap ?? 24} min="1" className="w-full p-2 bg-white rounded-lg border outline-none text-xs text-center" />
+                         </div>
+                       </div>
+                     </div>
+                  </div>
+                  
                   {/* Referrer Source Configuration Section */}
                   <div className="space-y-4">
                      <h4 className="text-xs font-bold text-orange-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
                        <Share2 size={14} />
-                       5. Referrer Source Configuration (v31.0)
+                       6. Referrer Source Configuration (v31.0)
                      </h4>
                      
                      {/* Referrer Mode Selection */}
@@ -25122,7 +25726,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                   <div className="space-y-4">
                      <h4 className="text-xs font-bold text-purple-500 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
                        <Calendar size={14} />
-                       6. Campaign Schedule (Optional)
+                       7. Campaign Schedule (Optional)
                      </h4>
                      
                      {/* START Schedule */}
