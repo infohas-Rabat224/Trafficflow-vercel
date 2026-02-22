@@ -10728,6 +10728,17 @@ const MainContent = () => {
   const [campaignToDelete, setCampaignToDelete] = useState<string | null>(null);
   const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
   
+  // Current System Time for Scheduler (GMT/UTC)
+  const [currentSystemTime, setCurrentSystemTime] = useState(new Date());
+  
+  // Update system time every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSystemTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  
   // Scraper Modal State
   const [scrapeUrl, setScrapeUrl] = useState('');
   const [isScrapingSite, setIsScrapingSite] = useState(false);
@@ -11557,6 +11568,7 @@ const MainContent = () => {
       
       const now = new Date();
       const nowISO = now.toISOString();
+      const gmtString = now.toISOString().slice(0, 19);
       
       // Find campaigns that are scheduled and their time has come
       const campaignsToActivate = campaigns.filter(c => {
@@ -11565,22 +11577,27 @@ const MainContent = () => {
         if (c.status !== 'scheduled') return false;
         if (!c.nextRunAt && !c.scheduledDate) return false;
         
-        // Parse the scheduled time
+        // Parse the scheduled time - treat as GMT/UTC
         let scheduledTime: Date;
         if (c.nextRunAt) {
           scheduledTime = new Date(c.nextRunAt);
         } else if (c.scheduledDate && c.scheduledTime) {
-          scheduledTime = new Date(`${c.scheduledDate}T${c.scheduledTime}:00`);
+          // Treat scheduled time as GMT/UTC by adding 'Z' suffix
+          scheduledTime = new Date(`${c.scheduledDate}T${c.scheduledTime}:00Z`);
         } else {
           return false;
         }
         
-        // Check if scheduled time has passed
-        return scheduledTime <= now;
+        // Check if scheduled time has passed (GMT comparison)
+        const hasPassed = scheduledTime <= now;
+        if (c.scheduledEnabled) {
+          console.log(`[AutoScheduler] "${c.name}": Scheduled ${scheduledTime.toISOString()}, Now ${gmtString}, Passed: ${hasPassed}`);
+        }
+        return hasPassed;
       });
       
       if (campaignsToActivate.length > 0) {
-        console.log(`[Scheduler] Activating ${campaignsToActivate.length} scheduled campaign(s)`);
+        console.log(`[AutoScheduler] ✅ Activating ${campaignsToActivate.length} scheduled campaign(s)`);
         
         // Start the engine if not running
         setIsEngineRunning(prev => {
@@ -11591,10 +11608,10 @@ const MainContent = () => {
           return prev;
         });
         
-        // Update campaign statuses to active
+        // Update campaign statuses to active (like clicking START button)
         setCampaigns(prev => prev.map(c => {
           if (campaignsToActivate.some(scheduled => scheduled.id === c.id)) {
-            console.log(`[Scheduler] Activating campaign: ${c.name}`);
+            console.log(`[AutoScheduler] ✅ Campaign "${c.name}" activated!`);
             return {
               ...c,
               status: 'active' as const,
@@ -11608,7 +11625,7 @@ const MainContent = () => {
         
         // Show toast for each activated campaign
         campaignsToActivate.forEach(c => {
-          addToast?.(`⏰ Scheduled campaign "${c.name}" is now running!`, 'success');
+          addToast?.(`⏰ Scheduled campaign "${c.name}" is now RUNNING!`, 'success');
         });
       }
       
@@ -13451,6 +13468,22 @@ End of Report
           <SidebarItem icon={Terminal} label="Logs" active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} />
         </nav>
         <div className="p-3 border-t border-slate-200 bg-white sticky bottom-0">
+           {/* Current System Time - GMT Display */}
+           <div className="mb-2 p-2 bg-slate-50 border border-slate-200 rounded-lg">
+             <div className="flex items-center justify-between">
+               <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                 <Clock size={10} />
+                 System Time (GMT)
+               </span>
+               <span className="text-[10px] font-mono font-bold text-slate-700">
+                 {currentSystemTime.toISOString().slice(0, 19).replace('T', ' ')}
+               </span>
+             </div>
+             <div className="text-[9px] text-slate-400 mt-1">
+               Your local: {currentSystemTime.toLocaleString()}
+             </div>
+           </div>
+           
            {/* Scheduled Campaigns Indicator */}
            {campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled).length > 0 && (
              <div className="mb-2 p-2 bg-purple-50 border border-purple-200 rounded-lg">
@@ -13461,29 +13494,64 @@ End of Report
                  </span>
                  <button 
                    onClick={() => {
-                     // Force check scheduled campaigns
+                     // Force check and activate scheduled campaigns
                      const now = new Date();
                      const nowISO = now.toISOString();
+                     const gmtString = now.toISOString().slice(0, 19);
+                     
                      const toActivate = campaigns.filter(c => {
                        if (!c.scheduledEnabled || c.status !== 'scheduled') return false;
-                       if (c.nextRunAt) return new Date(c.nextRunAt) <= now;
-                       if (c.scheduledDate && c.scheduledTime) {
-                         return new Date(`${c.scheduledDate}T${c.scheduledTime}:00`) <= now;
+                       
+                       // Parse scheduled time - treat as GMT
+                       let scheduledTime: Date;
+                       if (c.nextRunAt) {
+                         scheduledTime = new Date(c.nextRunAt);
+                       } else if (c.scheduledDate && c.scheduledTime) {
+                         // Treat scheduled time as GMT/UTC
+                         scheduledTime = new Date(`${c.scheduledDate}T${c.scheduledTime}:00Z`);
+                       } else {
+                         return false;
                        }
-                       return false;
+                       
+                       // Check if scheduled time has passed (compare with GMT)
+                       const hasPassed = scheduledTime <= now;
+                       console.log(`[Scheduler] Campaign "${c.name}": Scheduled ${scheduledTime.toISOString()}, Now ${gmtString}, Passed: ${hasPassed}`);
+                       return hasPassed;
                      });
                      
                      if (toActivate.length > 0) {
+                       // Start the engine first
                        setIsEngineRunning(true);
+                       
+                       // Activate each campaign (like clicking the START button)
                        setCampaigns(prev => prev.map(c => {
                          if (toActivate.some(s => s.id === c.id)) {
-                           return { ...c, status: 'active' as const, lastRunAt: nowISO, scheduledEnabled: false };
+                           console.log(`[Scheduler] ✅ Activating campaign: ${c.name}`);
+                           return { 
+                             ...c, 
+                             status: 'active' as const, 
+                             lastRunAt: nowISO, 
+                             scheduledEnabled: false,
+                             nextRunAt: undefined
+                           };
                          }
                          return c;
                        }));
-                       addToast?.(`✅ Activated ${toActivate.length} scheduled campaign(s)!`, 'success');
+                       
+                       // Show success toast
+                       toActivate.forEach(c => {
+                         addToast?.(`✅ Campaign "${c.name}" STARTED!`, 'success');
+                       });
+                       
+                       addToast?.(`🚀 Engine started + ${toActivate.length} campaign(s) activated!`, 'success');
                      } else {
-                       addToast?.('⏰ No campaigns ready to activate yet', 'info');
+                       // Show info with time details
+                       const scheduled = campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled);
+                       const timesStr = scheduled.map(c => {
+                         const t = c.nextRunAt || `${c.scheduledDate}T${c.scheduledTime}:00Z`;
+                         return `${c.name}: ${t}`;
+                       }).join(', ');
+                       addToast?.(`⏰ Not yet time. Current GMT: ${gmtString}. Scheduled: ${timesStr}`, 'info');
                      }
                    }}
                    className="text-[9px] font-bold text-purple-600 hover:text-purple-800 underline"
@@ -13496,11 +13564,11 @@ End of Report
                    const scheduled = campaigns.filter(c => c.status === 'scheduled' && c.scheduledEnabled && c.scheduledDate);
                    if (scheduled.length === 0) return 'No schedule';
                    const next = scheduled.sort((a, b) => {
-                     const aTime = a.nextRunAt || `${a.scheduledDate}T${a.scheduledTime}:00`;
-                     const bTime = b.nextRunAt || `${b.scheduledDate}T${b.scheduledTime}:00`;
+                     const aTime = a.nextRunAt || `${a.scheduledDate}T${a.scheduledTime}:00Z`;
+                     const bTime = b.nextRunAt || `${b.scheduledDate}T${b.scheduledTime}:00Z`;
                      return new Date(aTime).getTime() - new Date(bTime).getTime();
                    })[0];
-                   return `${next.scheduledDate} ${next.scheduledTime}`;
+                   return `${next.scheduledDate} ${next.scheduledTime} GMT`;
                  })()}
                </div>
              </div>
@@ -23319,13 +23387,26 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                        4. Campaign Schedule (Optional)
                      </h4>
                      <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl">
+                       {/* Current GMT Time Display */}
+                       <div className="mb-3 p-2 bg-white border border-purple-200 rounded-lg">
+                         <div className="flex items-center justify-between text-[10px]">
+                           <span className="font-bold text-purple-600">Current System Time (GMT):</span>
+                           <span className="font-mono font-bold text-slate-700">
+                             {new Date().toISOString().slice(0, 19).replace('T', ' ')}
+                           </span>
+                         </div>
+                         <p className="text-[9px] text-slate-500 mt-1">
+                           ⚠️ Schedule using GMT/UTC time. Your local: {new Date().toLocaleString()}
+                         </p>
+                       </div>
+                       
                        <label className="flex items-center gap-2 text-xs font-bold text-purple-700 cursor-pointer mb-4">
                          <input type="checkbox" name="scheduledEnabled" defaultChecked={editingCampaign?.scheduledEnabled} className="w-4 h-4" />
                          Enable Scheduled Run
                        </label>
                        <div className="grid grid-cols-2 gap-4">
                          <div className="space-y-2">
-                           <label className="text-[11px] font-bold text-slate-500 uppercase">Start Date</label>
+                           <label className="text-[11px] font-bold text-slate-500 uppercase">Start Date (GMT)</label>
                            <input 
                              type="date" 
                              name="scheduledDate" 
@@ -23335,7 +23416,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                            />
                          </div>
                          <div className="space-y-2">
-                           <label className="text-[11px] font-bold text-slate-500 uppercase">Start Time</label>
+                           <label className="text-[11px] font-bold text-slate-500 uppercase">Start Time (GMT)</label>
                            <input 
                              type="time" 
                              name="scheduledTime" 
@@ -23346,7 +23427,7 @@ Bounce Rate: ${(Math.random() * 30 + 20).toFixed(1)}%
                        </div>
                        <p className="text-[10px] text-purple-600 mt-3 flex items-center gap-1">
                          <Clock size={12} />
-                         Campaign will automatically start at the scheduled time
+                         Campaign will auto-start at scheduled GMT time + trigger engine
                        </p>
                      </div>
                   </div>
