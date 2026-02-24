@@ -13961,7 +13961,8 @@ const MainContent = () => {
            });
            
            // Update Device Distribution (Desktop vs Mobile) - using enhanced fingerprint
-           const isMobile = enhancedFingerprint.mobile;
+           // Support both v31.0 (isMobile) and legacy (mobile) property names
+           const isMobile = enhancedFingerprint.mobile ?? enhancedFingerprint.isMobile ?? false;
            setDeviceDistribution(prev => {
              const updated = [...prev];
              if (isMobile) {
@@ -13973,7 +13974,8 @@ const MainContent = () => {
            });
            
            // Update OS Breakdown - using enhanced fingerprint
-           const osName = enhancedFingerprint.osName || 'Unknown';
+           // Support both v31.0 (platform) and legacy (osName) property names
+           const osName = enhancedFingerprint.osName || enhancedFingerprint.platform || 'Unknown';
            setOsBreakdown(prev => {
              const existing = prev.find(item => item.os === osName);
              if (existing) {
